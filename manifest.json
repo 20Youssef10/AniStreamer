@@ -1,0 +1,68 @@
+
+{
+  "id": "/",
+  "name": "AniStream",
+  "short_name": "AniStream",
+  "start_url": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "orientation": "portrait",
+  "background_color": "#0F172A",
+  "theme_color": "#0F172A",
+  "description": "Your ultimate anime discovery, tracking, and streaming companion with AI superpowers.",
+  "launch_handler": {
+    "client_mode": "focus-existing"
+  },
+  "categories": ["entertainment", "social", "multimedia"],
+  "icons": [
+    {
+      "src": "logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "wide"
+    },
+    {
+      "src": "logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "narrow"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Search Anime",
+      "short_name": "Search",
+      "description": "Find your next watch",
+      "url": "/#/search",
+      "icons": [{ "src": "logo.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Airing Schedule",
+      "short_name": "Calendar",
+      "description": "See what's airing today",
+      "url": "/#/calendar",
+      "icons": [{ "src": "logo.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "AI Assistant",
+      "short_name": "AI Chat",
+      "description": "Chat with anime characters",
+      "url": "/#/ai",
+      "icons": [{ "src": "logo.png", "sizes": "192x192" }]
+    }
+  ]
+}

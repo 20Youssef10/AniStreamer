@@ -1,0 +1,126 @@
+
+<!DOCTYPE html>
+<html lang="en" class="dark" dir="ltr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#0F172A" />
+    
+    <!-- PWA iOS settings -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="AniStream" />
+    
+    <title>AniStream - Discover Anime</title>
+    <meta name="description" content="Track your favorite anime, discover new trends, and manage your watchlist." />
+    
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/png" href="logo.png" />
+    <link rel="apple-touch-icon" href="logo.png" />
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Tally Popup Form -->
+    <script async src="https://tally.so/widgets/embed.js"></script>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              primary: 'var(--color-primary)',
+              secondary: '#8B5CF6',
+              accent: '#EC4899',
+              dark: {
+                900: '#0F172A',
+                800: '#1E293B',
+                700: '#334155'
+              }
+            },
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+              display: ['Poppins', 'sans-serif'],
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      :root {
+        --color-primary: #3B82F6;
+      }
+      body {
+        background-color: #0F172A;
+        color: #F8FAFC;
+        min-height: 100vh;
+        overscroll-behavior-y: none;
+      }
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #0F172A; 
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #334155; 
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #475569; 
+      }
+      .mobile-safe-bottom {
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+      body.high-contrast {
+        background-color: #000000 !important;
+        color: #FFFFFF !important;
+      }
+      body.high-contrast * {
+        border-color: #FFFFFF !important;
+      }
+      body.high-contrast .text-slate-400 {
+        color: #DDDDDD !important;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "recharts": "https://esm.sh/recharts@^3.6.0",
+    "react": "https://esm.sh/react@^19.2.3",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react-dom": "https://esm.sh/react-dom@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "firebase/app": "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js",
+    "firebase/auth": "https://www.gstatic.com/firebasejs/10.13.1/firebase-auth.js",
+    "firebase/firestore": "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js",
+    "firebase/analytics": "https://www.gstatic.com/firebasejs/10.13.1/firebase-analytics.js",
+    "firebase/messaging": "https://www.gstatic.com/firebasejs/10.13.1/firebase-messaging.js",
+    "react-router-dom": "https://esm.sh/react-router-dom@^7.11.0",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "@google/genai": "https://esm.sh/@google/genai",
+    "firebase/": "https://esm.sh/firebase@^12.7.0/",
+    "@tanstack/react-query": "https://esm.sh/@tanstack/react-query@^5.62.0",
+    "fuse.js": "https://esm.sh/fuse.js@^7.0.0",
+    "dexie": "https://esm.sh/dexie@^4.0.8",
+    "canvas-confetti": "https://esm.sh/canvas-confetti@^1.9.3",
+    "@sentry/react": "https://esm.sh/@sentry/react@^8.47.0",
+    "hls.js": "https://esm.sh/hls.js@^1.5.8",
+    "express": "https://esm.sh/express@^5.2.1",
+    "cors": "https://esm.sh/cors@^2.8.5",
+    "dotenv": "https://esm.sh/dotenv@^17.2.3"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
