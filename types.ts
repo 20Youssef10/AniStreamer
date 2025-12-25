@@ -1,3 +1,4 @@
+
 export interface AppConfig {
   firebase: {
     apiKey: string;
@@ -374,7 +375,7 @@ export interface MangaChapter {
   language: string;
   pages?: number; // count
   publishAt: string | number;
-  source: 'dex' | 'hook' | 'manual';
+  source: 'dex' | 'hook' | 'manual' | 'olympus';
 }
 
 export interface CustomList {
@@ -574,6 +575,7 @@ export interface UserSettings {
     socialAlerts: boolean;
   };
   quickActions: ('list' | 'favorite' | 'share' | 'planning' | 'completed')[];
+  youtubeApiKey?: string;
 }
 
 export interface AppBranding {
@@ -632,7 +634,7 @@ export interface SourceChapter {
   language: string;
   date: number;
   volume?: string;
-  source?: 'dex' | 'hook' | 'manual';
+  source?: 'dex' | 'hook' | 'manual' | 'olympus';
 }
 
 export interface AppNotification {

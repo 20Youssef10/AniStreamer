@@ -1,6 +1,5 @@
 
 import { MangaSource, SourceChapter, SourceManga } from '../types';
-import { API_BASE_URL } from '../constants';
 
 class OlympusService implements MangaSource {
   id = 'olympus';
@@ -13,24 +12,18 @@ class OlympusService implements MangaSource {
   private async fetchProxy(path: string): Promise<Document> {
       const targetUrl = `${this.baseUrl}${path.startsWith('/') ? '' : '/'}${path}`;
       
-      // Try using public CORS proxy first as it mimics browser headers better for scraping
       try {
+          // Use public CORS proxy
           const response = await fetch(`https://corsproxy.io/?${encodeURIComponent(targetUrl)}`);
           if (response.ok) {
               const html = await response.text();
               return new DOMParser().parseFromString(html, 'text/html');
           }
+          throw new Error(`Proxy status: ${response.status}`);
       } catch (e) {
-          console.warn("Public proxy failed, trying backend...", e);
+          console.error("Olympus Fetch Error", e);
+          throw e;
       }
-
-      // Fallback to our external backend proxy
-      // Construct absolute URL: https://backend.com/api/olympus/proxy...
-      const response = await fetch(`${API_BASE_URL}/api/olympus/proxy?path=${encodeURIComponent(path)}`);
-      
-      if (!response.ok) throw new Error(`Olympus Proxy Failed: ${response.status}`);
-      const html = await response.text();
-      return new DOMParser().parseFromString(html, 'text/html');
   }
 
   async searchManga(query: string): Promise<SourceManga[]> {

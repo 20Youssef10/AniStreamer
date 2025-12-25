@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import { firebaseService } from '../services/firebase';
 import { useToast } from '../context/ToastContext';
 import { anilistService } from '../services/anilist';
-import { API_BASE_URL } from '../constants';
 
 const AniListCallback: React.FC = () => {
   const navigate = useNavigate();
@@ -15,6 +14,7 @@ const AniListCallback: React.FC = () => {
     if (processed.current) return;
     processed.current = true;
 
+    // Handle Hash params for Implicit Grant (This works Frontend-Only)
     const hash = window.location.hash;
     let token = null;
     let error = null;
@@ -23,8 +23,13 @@ const AniListCallback: React.FC = () => {
         token = hash.substring(1).split('&').find(elem => elem.startsWith('access_token'))?.split('=')[1];
     } 
     
+    // Check search params for errors
     const params = new URLSearchParams(window.location.search);
     if (!error) error = params.get('error');
+    
+    // Note: The 'code' flow requires a client secret, which we cannot store safely in frontend-only app.
+    // We assume the user is redirected using Implicit Grant (response_type=token) if possible, 
+    // or we display an error if they try to use the Code flow without a backend.
     const code = params.get('code');
 
     if (error) {
@@ -40,26 +45,10 @@ const AniListCallback: React.FC = () => {
     if (token) {
         saveToken(token).then(finalize);
     } else if (code) {
-        // Use external backend for code exchange
-        fetch(`${API_BASE_URL}/api/anilist/token`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ 
-                code, 
-                redirect_uri: "https://anistream-ata1.web.app/auth/anilist/callback" 
-            })
-        })
-        .then(res => res.json())
-        .then(data => {
-            if(data.access_token) saveToken(data.access_token).then(finalize);
-            else throw new Error(data.error || "No token returned");
-        })
-        .catch(e => {
-            console.error(e);
-            showToast("AniList Code Exchange Failed", "error");
-            finalize();
-        });
+        showToast("Authorization Code flow requires backend. Please use Implicit Grant.", "error");
+        finalize();
     } else {
+        // No code found
         finalize();
     }
   }, [navigate, showToast]);

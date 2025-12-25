@@ -4,17 +4,18 @@ import { useParams, Link } from 'react-router-dom';
 import { anilistService } from '../services/anilist';
 import { firebaseService } from '../services/firebase';
 import { aiService } from '../services/ai'; // Import AI Service
+import { malService } from '../services/mal'; // Import MAL Service
 import { Character, CharacterComment } from '../types';
 import LazyImage from '../components/LazyImage';
-import { Heart, Film, Book, Mic, MessageSquare, Send, ThumbsUp, Globe, ChevronDown, ChevronUp, Quote, Copy, Loader2, BrainCircuit } from 'lucide-react';
+import { Heart, Film, Book, Mic, MessageSquare, Send, ThumbsUp, Globe, ChevronDown, ChevronUp, Quote, Copy, Loader2, BrainCircuit, Cake, BellRing, ExternalLink, Image as ImageIcon, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { MentionInput } from '../components/Layout';
 import { useToast } from '../context/ToastContext';
 
 const CharacterDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const [char, setChar] = useState<Character | null>(null);
+  const [char, setChar] = useState<any | null>(null); // Using any to accommodate extended fields like siteUrl/alternative
   const [loading, setLoading] = useState(true);
-  const [mediaTab, setMediaTab] = useState<'ANIME' | 'MANGA' | 'COMMENTS' | 'QUOTES' | 'ANALYSIS'>('ANIME');
+  const [mediaTab, setMediaTab] = useState<'ANIME' | 'MANGA' | 'COMMENTS' | 'QUOTES' | 'ANALYSIS' | 'GALLERY'>('ANIME');
   const [comments, setComments] = useState<CharacterComment[]>([]);
   const [newComment, setNewComment] = useState('');
   const [isFavorite, setIsFavorite] = useState(false);
@@ -26,11 +27,17 @@ const CharacterDetails: React.FC = () => {
 
   // Quotes State
   const [quotes, setQuotes] = useState<string[]>([]);
-  const [loadingQuotes, setLoadingQuotes] = useState(false);
-
+  
   // Analysis State
   const [analysis, setAnalysis] = useState<string>('');
   const [loadingAnalysis, setLoadingAnalysis] = useState(false);
+
+  // Gallery State
+  const [galleryImages, setGalleryImages] = useState<string[]>([]);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
+  // Birthday State
+  const [daysUntilBirthday, setDaysUntilBirthday] = useState<number | null>(null);
 
   const { showToast } = useToast();
   const auth = firebaseService.getAuthInstance();
@@ -42,6 +49,27 @@ const CharacterDetails: React.FC = () => {
         try {
             const data = await anilistService.getCharacterDetails(parseInt(id));
             setChar(data);
+
+            // Fetch MAL images if available (Not currently supported by AniList API for Characters)
+            // if (data.idMal) {
+            //     malService.getPictures(data.idMal, 'characters').then(pics => setGalleryImages(pics));
+            // }
+
+            // Calculate Birthday
+            if (data.dateOfBirth?.month && data.dateOfBirth?.day) {
+                const today = new Date();
+                const currentYear = today.getFullYear();
+                let bday = new Date(currentYear, data.dateOfBirth.month - 1, data.dateOfBirth.day);
+                
+                // If birthday passed this year, look at next year
+                if (bday < today && bday.getDate() !== today.getDate()) {
+                    bday.setFullYear(currentYear + 1);
+                }
+                
+                const diffTime = Math.abs(bday.getTime() - today.getTime());
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+                setDaysUntilBirthday(diffDays);
+            }
 
             const customContent = await firebaseService.getCustomDescription('character', parseInt(id));
             if (customContent) {
@@ -57,7 +85,7 @@ const CharacterDetails: React.FC = () => {
             }
 
             // Fetch Quotes using AI if we have context
-            const animeContext = data.media?.edges?.find(e => e.node.type === 'ANIME')?.node.title.romaji 
+            const animeContext = data.media?.edges?.find((e: any) => e.node.type === 'ANIME')?.node.title.romaji 
                               || data.media?.edges?.[0]?.node.title.romaji;
             
             if (data.name.full && animeContext) {
@@ -124,9 +152,26 @@ const CharacterDetails: React.FC = () => {
       if (!user || !id) return showToast("Login to favorite", "error");
       const cid = parseInt(id);
       try {
-          await firebaseService.toggleFavorite(user.uid, cid, !isFavorite, 'CHARACTER');
-          setIsFavorite(!isFavorite);
-          showToast(isFavorite ? "Removed from favorites" : "Added to favorites", "success");
+          const newStatus = !isFavorite;
+          await firebaseService.toggleFavorite(user.uid, cid, newStatus, 'CHARACTER');
+          setIsFavorite(newStatus);
+          
+          if (newStatus) {
+              // Check for Birthday Alert Logic
+              if (daysUntilBirthday !== null && daysUntilBirthday <= 30) {
+                  showToast(`Added! Birthday is in ${daysUntilBirthday} days. Notification set!`, "success");
+                  // Send internal notification
+                  await firebaseService.sendUserNotification(user.uid, {
+                      title: "🎉 Birthday Alert!",
+                      body: `${char.name.full}'s birthday is coming up on ${char.dateOfBirth.month}/${char.dateOfBirth.day}!`,
+                      link: `/character/${char.id}`
+                  });
+              } else {
+                  showToast("Added to favorites", "success");
+              }
+          } else {
+              showToast("Removed from favorites", "success");
+          }
       } catch (e) {
           showToast("Failed to update favorites", "error");
       }
@@ -135,6 +180,16 @@ const CharacterDetails: React.FC = () => {
   const copyQuote = (text: string) => {
       navigator.clipboard.writeText(text);
       showToast("Quote copied!", "success");
+  };
+
+  // Lightbox Navigation
+  const nextImage = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (lightboxIndex !== null && lightboxIndex < galleryImages.length - 1) setLightboxIndex(lightboxIndex + 1);
+  };
+  const prevImage = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (lightboxIndex !== null && lightboxIndex > 0) setLightboxIndex(lightboxIndex - 1);
   };
 
   if (loading || !char) return <div className="p-10 text-center">Loading Character...</div>;
@@ -148,6 +203,34 @@ const CharacterDetails: React.FC = () => {
 
   return (
     <div className="animate-fadeIn pb-12">
+        {/* Lightbox Modal */}
+        {lightboxIndex !== null && (
+            <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-4 backdrop-blur-md animate-fadeIn" onClick={() => setLightboxIndex(null)}>
+                <div className="relative max-w-6xl w-full h-full flex items-center justify-center">
+                    <img src={galleryImages[lightboxIndex]} alt="Gallery" className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl" onClick={e => e.stopPropagation()} />
+                    
+                    <button onClick={() => setLightboxIndex(null)} className="absolute top-4 right-4 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors">
+                        <X className="w-6 h-6" />
+                    </button>
+
+                    {lightboxIndex > 0 && (
+                        <button onClick={prevImage} className="absolute left-4 p-4 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors">
+                            <ChevronLeft className="w-8 h-8" />
+                        </button>
+                    )}
+                    {lightboxIndex < galleryImages.length - 1 && (
+                        <button onClick={nextImage} className="absolute right-4 p-4 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors">
+                            <ChevronRight className="w-8 h-8" />
+                        </button>
+                    )}
+                    
+                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 px-4 py-2 rounded-full text-white text-sm">
+                        {lightboxIndex + 1} / {galleryImages.length}
+                    </div>
+                </div>
+            </div>
+        )}
+
         <div className="flex flex-col md:flex-row gap-8">
             <div className="w-full md:w-1/3 lg:w-1/4 space-y-4">
                 <LazyImage src={char.image.large} alt={char.name.full} className="w-full rounded-2xl shadow-xl" />
@@ -160,12 +243,57 @@ const CharacterDetails: React.FC = () => {
                     {isFavorite ? 'Favorited' : 'Add to Favorites'}
                 </button>
 
+                {/* Birthday Alert Box if coming soon and favorite */}
+                {isFavorite && daysUntilBirthday !== null && daysUntilBirthday <= 30 && (
+                    <div className="bg-gradient-to-r from-pink-500/20 to-purple-500/20 p-3 rounded-xl border border-pink-500/30 flex items-center gap-3">
+                        <div className="p-2 bg-pink-500 rounded-full text-white"><Cake className="w-4 h-4" /></div>
+                        <div>
+                            <div className="text-xs font-bold text-pink-300 uppercase">Upcoming Birthday</div>
+                            <div className="text-sm text-white font-bold">{daysUntilBirthday === 0 ? "Today!" : `In ${daysUntilBirthday} days`}</div>
+                        </div>
+                        <BellRing className="w-4 h-4 text-pink-400 ml-auto animate-pulse" />
+                    </div>
+                )}
+
                 <div className="bg-dark-800 p-4 rounded-xl border border-white/5 space-y-3">
-                    <h3 className="font-bold border-b border-white/5 pb-2">Information</h3>
+                    <h3 className="font-bold border-b border-white/5 pb-2 text-slate-300">Information</h3>
+                    
+                    {char.dateOfBirth?.month && (
+                        <div className="flex justify-between text-sm items-center">
+                            <span className="text-slate-400 flex items-center gap-2"><Cake className="w-3 h-3"/> Birthday</span>
+                            <span>{new Date(0, char.dateOfBirth.month - 1, char.dateOfBirth.day).toLocaleDateString(undefined, {month:'long', day:'numeric'})}</span>
+                        </div>
+                    )}
+                    
                     {char.age && <div className="flex justify-between text-sm"><span className="text-slate-400">Age</span><span>{char.age}</span></div>}
                     {char.gender && <div className="flex justify-between text-sm"><span className="text-slate-400">Gender</span><span>{char.gender}</span></div>}
                     {char.bloodType && <div className="flex justify-between text-sm"><span className="text-slate-400">Blood Type</span><span>{char.bloodType}</span></div>}
-                    <div className="flex justify-between text-sm"><span className="text-slate-400">Favorites</span><span className="text-primary flex items-center gap-1"><Heart className="w-3 h-3 fill-current"/> {char.favourites}</span></div>
+                    
+                    <div className="flex justify-between text-sm">
+                        <span className="text-slate-400">Favorites</span>
+                        <span className="text-primary flex items-center gap-1"><Heart className="w-3 h-3 fill-current"/> {char.favourites?.toLocaleString()}</span>
+                    </div>
+
+                    {/* Alternate Names */}
+                    {char.name.alternative && char.name.alternative.length > 0 && (
+                        <div className="pt-2 border-t border-white/5">
+                            <span className="text-slate-400 text-xs block mb-1">Also Known As</span>
+                            <div className="flex flex-wrap gap-1">
+                                {char.name.alternative.slice(0, 3).map((alt: string, i: number) => (
+                                    <span key={i} className="text-[10px] bg-white/5 px-2 py-0.5 rounded text-slate-300 border border-white/5">{alt}</span>
+                                ))}
+                                {char.name.alternative.length > 3 && <span className="text-[10px] text-slate-500">+{char.name.alternative.length - 3} more</span>}
+                            </div>
+                        </div>
+                    )}
+
+                    {char.siteUrl && (
+                        <div className="pt-2 border-t border-white/5 text-center">
+                            <a href={char.siteUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-400 hover:underline flex items-center justify-center gap-1">
+                                View on AniList <ExternalLink className="w-3 h-3" />
+                            </a>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -221,6 +349,12 @@ const CharacterDetails: React.FC = () => {
                             <Book className="w-5 h-5" /> Manga ({mangaEdges.length})
                         </button>
                         <button 
+                            onClick={() => setMediaTab('GALLERY')}
+                            className={`pb-2 flex items-center gap-2 font-bold transition-colors border-b-2 whitespace-nowrap ${mediaTab === 'GALLERY' ? 'border-primary text-primary' : 'border-transparent text-slate-400 hover:text-white'}`}
+                        >
+                            <ImageIcon className="w-5 h-5" /> Gallery
+                        </button>
+                        <button 
                             onClick={() => setMediaTab('ANALYSIS')}
                             className={`pb-2 flex items-center gap-2 font-bold transition-colors border-b-2 whitespace-nowrap ${mediaTab === 'ANALYSIS' ? 'border-primary text-primary' : 'border-transparent text-slate-400 hover:text-white'}`}
                         >
@@ -239,6 +373,26 @@ const CharacterDetails: React.FC = () => {
                             <MessageSquare className="w-5 h-5" /> Discussions
                         </button>
                     </div>
+
+                    {mediaTab === 'GALLERY' && (
+                        <div className="animate-fadeIn">
+                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                                {galleryImages.map((src, idx) => (
+                                    <div key={idx} className="relative group cursor-zoom-in aspect-[2/3] overflow-hidden rounded-xl bg-dark-800" onClick={() => setLightboxIndex(idx)}>
+                                        <LazyImage src={src} alt="Character Image" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                                        <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                            <ImageIcon className="w-8 h-8 text-white" />
+                                        </div>
+                                    </div>
+                                ))}
+                                {galleryImages.length === 0 && (
+                                    <div className="col-span-full text-center py-12 text-slate-500">
+                                        No gallery images found.
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
 
                     {mediaTab === 'ANALYSIS' && (
                         <div className="animate-fadeIn">
@@ -336,7 +490,7 @@ const CharacterDetails: React.FC = () => {
                         </div>
                     )}
 
-                    {mediaTab !== 'COMMENTS' && mediaTab !== 'QUOTES' && mediaTab !== 'ANALYSIS' && (
+                    {mediaTab !== 'COMMENTS' && mediaTab !== 'QUOTES' && mediaTab !== 'ANALYSIS' && mediaTab !== 'GALLERY' && (
                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 gap-4 animate-fadeIn">
                             {displayedEdges.map((edge: any, idx: number) => (
                                 <div key={`${edge.node.id}-${idx}`} className="bg-dark-800 p-3 rounded-xl border border-white/5 flex gap-3 hover:border-white/20 transition-colors">

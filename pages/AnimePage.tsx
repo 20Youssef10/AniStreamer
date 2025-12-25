@@ -2,16 +2,21 @@
 import React, { useEffect, useState } from 'react';
 import { anilistService } from '../services/anilist';
 import { firebaseService } from '../services/firebase';
-import { Anime } from '../types';
+import { Anime, AnimeSort } from '../types';
 import AnimeCard from '../components/AnimeCard';
-import { TrendingUp, Calendar, Flame, Sparkles, Clock, Search, ArrowRight } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { TrendingUp, Calendar, Clock, Sparkles, Search, ArrowRight, Trophy, Zap, Globe, Award } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
 
 const AnimePage: React.FC = () => {
   const [trending, setTrending] = useState<Anime[]>([]);
   const [seasonal, setSeasonal] = useState<Anime[]>([]);
   const [upcoming, setUpcoming] = useState<Anime[]>([]);
+  const [allTime, setAllTime] = useState<Anime[]>([]);
+  const [top100, setTop100] = useState<Anime[]>([]);
+  const [newEps, setNewEps] = useState<Anime[]>([]);
+  const [topRated, setTopRated] = useState<Anime[]>([]);
   const [recommended, setRecommended] = useState<Anime[]>([]);
+  
   const [loading, setLoading] = useState(true);
   const [recTitle, setRecTitle] = useState("Recommended For You");
   const [searchQuery, setSearchQuery] = useState('');
@@ -30,7 +35,7 @@ const AnimePage: React.FC = () => {
         }
         
         let recGenre = "Action"; 
-        let title = "Recommended (General)";
+        let title = "AI Recommendations";
 
         if (user) {
             try {
@@ -51,16 +56,46 @@ const AnimePage: React.FC = () => {
         }
         setRecTitle(title);
 
-        const [trendData, seasonData, upcomingData, recData] = await Promise.all([
+        // Calculate Seasons
+        const date = new Date();
+        const month = date.getMonth();
+        const year = date.getFullYear();
+        let season: 'WINTER' | 'SPRING' | 'SUMMER' | 'FALL' = 'WINTER';
+        if (month >= 2 && month <= 4) season = 'SPRING';
+        else if (month >= 5 && month <= 7) season = 'SUMMER';
+        else if (month >= 8 && month <= 10) season = 'FALL';
+        
+        const nextSeasonData = anilistService.getNextSeason();
+
+        const [
+            trendData, 
+            seasonData, 
+            upcomingData, 
+            recData,
+            allTimeData,
+            top100Data,
+            newEpsData,
+            topRatedData
+        ] = await Promise.all([
           anilistService.getTrending(10, false, 'ANIME'),
-          anilistService.getSeasonal('SPRING', 2024),
-          anilistService.getUpcoming(),
-          anilistService.searchAnime({ page: 1, genre: recGenre, type: 'ANIME' })
+          anilistService.getSeasonal(season, year, 'ANIME', 10),
+          anilistService.getSeasonal(nextSeasonData.season, nextSeasonData.year, 'ANIME', 10),
+          anilistService.searchAnime({ page: 1, genre: recGenre, type: 'ANIME', sort: AnimeSort.POPULARITY_DESC }),
+          anilistService.getPopularAllTime('ANIME', 10),
+          anilistService.getTopRated('ANIME', 10),
+          anilistService.getNewEpisodes(10),
+          anilistService.getTopRated('ANIME', 10)
         ]);
+
         setTrending(trendData);
         setSeasonal(seasonData);
         setUpcoming(upcomingData);
-        setRecommended(recData.Page.media.slice(0, 5));
+        setRecommended(recData.Page.media.slice(0, 10));
+        setAllTime(allTimeData);
+        setTop100(top100Data);
+        setNewEps(newEpsData);
+        setTopRated(topRatedData);
+
       } catch (error) {
         console.error("Failed to fetch anime page data", error);
       } finally {
@@ -77,6 +112,27 @@ const AnimePage: React.FC = () => {
       }
   };
 
+  const renderSection = (title: string, icon: React.ReactNode, data: Anime[], link?: string) => (
+      <section>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-2">
+            {icon}
+            <h2 className="text-2xl font-display font-bold">{title}</h2>
+          </div>
+          {link && (
+              <Link to={link} className="text-sm font-bold text-slate-400 hover:text-white flex items-center gap-1 group">
+                View All <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              </Link>
+          )}
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
+          {data.map(anime => (
+            <AnimeCard key={anime.id} anime={anime} />
+          ))}
+        </div>
+      </section>
+  );
+
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[50vh]">
@@ -86,7 +142,7 @@ const AnimePage: React.FC = () => {
   }
 
   return (
-    <div className="space-y-12 animate-fadeIn">
+    <div className="space-y-12 animate-fadeIn pb-12">
       <div className="text-center py-8">
           <h1 className="text-4xl font-display font-bold mb-4">Discover Anime</h1>
           <p className="text-slate-400 mb-8">Explore the world of Japanese animation.</p>
@@ -107,57 +163,14 @@ const AnimePage: React.FC = () => {
           </form>
       </div>
 
-      {/* Trending Section */}
-      <section>
-        <div className="flex items-center gap-2 mb-6">
-          <Flame className="text-orange-500" />
-          <h2 className="text-2xl font-display font-bold">Trending Now</h2>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
-          {trending.map(anime => (
-            <AnimeCard key={anime.id} anime={anime} />
-          ))}
-        </div>
-      </section>
-
-      {/* Seasonal Section */}
-      <section>
-        <div className="flex items-center gap-2 mb-6">
-          <Calendar className="text-green-500" />
-          <h2 className="text-2xl font-display font-bold">This Season</h2>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
-          {seasonal.map(anime => (
-            <AnimeCard key={anime.id} anime={anime} />
-          ))}
-        </div>
-      </section>
-
-      {/* AI Recommendations */}
-      <section>
-        <div className="flex items-center gap-2 mb-6">
-          <Sparkles className="text-purple-400" />
-          <h2 className="text-2xl font-display font-bold">{recTitle}</h2>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
-          {recommended.map(anime => (
-            <AnimeCard key={anime.id} anime={anime} />
-          ))}
-        </div>
-      </section>
-
-       {/* Upcoming Section */}
-      <section>
-        <div className="flex items-center gap-2 mb-6">
-          <Clock className="text-blue-400" />
-          <h2 className="text-2xl font-display font-bold">Coming Soon</h2>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
-          {upcoming.map(anime => (
-            <AnimeCard key={anime.id} anime={anime} />
-          ))}
-        </div>
-      </section>
+      {renderSection("Trending Now", <TrendingUp className="text-red-500 w-6 h-6" />, trending, "/search?sort=TRENDING_DESC&type=ANIME")}
+      {renderSection("Popular This Season", <Calendar className="text-green-500 w-6 h-6" />, seasonal, "/search?season=CURRENT&type=ANIME")}
+      {renderSection("Upcoming Next Season", <Clock className="text-blue-400 w-6 h-6" />, upcoming, "/upcoming")}
+      {renderSection("All Time Popular", <Trophy className="text-yellow-500 w-6 h-6" />, allTime, "/search?sort=POPULARITY_DESC&type=ANIME")}
+      {renderSection("Top 100 Anime", <Award className="text-purple-500 w-6 h-6" />, top100, "/ranking")}
+      {renderSection(recTitle, <Sparkles className="text-pink-400 w-6 h-6" />, recommended)}
+      {renderSection("New Episodes", <Zap className="text-yellow-400 w-6 h-6" />, newEps)}
+      {renderSection("Top Rated Everywhere", <Globe className="text-blue-500 w-6 h-6" />, topRated, "/ranking")}
     </div>
   );
 };

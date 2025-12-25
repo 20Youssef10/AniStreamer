@@ -47,7 +47,8 @@ const DEFAULT_SETTINGS: UserSettings = {
       airingAlerts: true,
       socialAlerts: true
   },
-  quickActions: ['list', 'favorite']
+  quickActions: ['list', 'favorite'],
+  youtubeApiKey: ''
 };
 
 interface SettingsContextProps {
@@ -165,8 +166,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (newSettings.player) updated.player = { ...settings.player, ...newSettings.player };
       if (newSettings.reader) updated.reader = { ...settings.reader, ...newSettings.reader };
       if (newSettings.notifications) updated.notifications = { ...settings.notifications, ...newSettings.notifications };
-      // quickActions is a direct array replacement, so it's handled by top-level spread
-
+      
       setSettings(updated);
       localStorage.setItem('anistream_settings', JSON.stringify(updated));
 

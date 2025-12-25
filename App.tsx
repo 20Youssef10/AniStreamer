@@ -52,11 +52,13 @@ import Leaderboard from './pages/Leaderboard';
 import Reader from './pages/Reader';
 import TopCharacters from './pages/TopCharacters';
 import GlobalRanking from './pages/GlobalRanking';
+import GlobalStats from './pages/GlobalStats';
 import ComingSoon from './pages/ComingSoon';
 import About from './pages/About';
 import Isekai from './pages/Isekai';
 import SpeedTest from './pages/SpeedTest';
 import Quotes from './pages/Quotes';
+import History from './pages/History'; // Import History
 
 const App: React.FC = () => {
   const [init, setInit] = useState(false);
@@ -131,6 +133,7 @@ const App: React.FC = () => {
               <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/anime" element={<AnimePage />} />
+                <Route path="/history" element={<History />} /> 
                 <Route path="/upcoming" element={<ComingSoon />} />
                 <Route path="/search" element={<Search />} />
                 <Route path="/calendar" element={<Calendar />} />
@@ -150,6 +153,7 @@ const App: React.FC = () => {
                 <Route path="/reader" element={<Reader />} />
                 <Route path="/top-characters" element={<TopCharacters />} />
                 <Route path="/ranking" element={<GlobalRanking />} />
+                <Route path="/global-stats" element={<GlobalStats />} />
                 <Route path="/admin" element={<AdminDashboard />} />
                 <Route path="/about" element={<About />} />
                 <Route path="/isekai" element={<Isekai />} />

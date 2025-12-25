@@ -1,5 +1,4 @@
 
-// ... imports ...
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { anilistService } from '../services/anilist';
@@ -9,13 +8,17 @@ import { malService, MalThemes } from '../services/mal';
 import { spotifyService } from '../services/spotify';
 import { Anime, UserListEntry, DiscussionPost, Episode } from '../types';
 import { STATUS_OPTIONS } from '../constants';
-import { Calendar, Star, Heart, MessageSquare, BookOpen, Users, Link as LinkIcon, Briefcase, Share2, X, Plus, Edit, ChevronDown, ChevronUp, ChevronRight, ThumbsUp, Reply, Trophy, Hash, PlayCircle, Monitor, Info, Film, Sparkles, BrainCircuit, Download, MessageCircle, Music, ExternalLink, Headphones, Disc, Tv, Globe } from 'lucide-react';
+import { Calendar, Star, Heart, MessageSquare, BookOpen, Users, Link as LinkIcon, Briefcase, Share2, X, Plus, Edit, ChevronDown, ChevronUp, ChevronRight, ThumbsUp, Reply, Trophy, Hash, PlayCircle, Monitor, Info, Film, Sparkles, BrainCircuit, Download, MessageCircle, Music, ExternalLink, Headphones, Disc, Tv, Globe, Image as ImageIcon, ChevronLeft, Network, Mic } from 'lucide-react';
 import LazyImage from '../components/LazyImage';
 import { useToast } from '../context/ToastContext';
 import { MentionInput } from '../components/Layout';
 import VideoPlayer from '../components/VideoPlayer';
 import AnimeCard from '../components/AnimeCard';
 import { usePlayer } from '../context/PlayerContext';
+import { db } from '../services/db'; 
+import FillerBadge from '../components/FillerBadge'; 
+import RelationGraph from '../components/RelationGraph';
+import OtakuLoader from '../components/OtakuLoader';
 
 interface DetailsProps {
   user: any | null;
@@ -26,12 +29,16 @@ const Details: React.FC<DetailsProps> = ({ user }) => {
   const [anime, setAnime] = useState<Anime | null>(null);
   const [userEntry, setUserEntry] = useState<UserListEntry | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'episodes' | 'characters' | 'staff' | 'recommendations' | 'discussions' | 'music'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'episodes' | 'characters' | 'staff' | 'recommendations' | 'discussions' | 'music' | 'gallery'>('overview');
   
   // Rating & Themes
   const [malScore, setMalScore] = useState<number | null>(null);
   const [themes, setThemes] = useState<MalThemes | null>(null);
   const [playingTheme, setPlayingTheme] = useState<string | null>(null);
+
+  // Gallery
+  const [galleryImages, setGalleryImages] = useState<string[]>([]);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   // Episodes
   const [episodes, setEpisodes] = useState<Episode[]>([]);
@@ -39,6 +46,7 @@ const Details: React.FC<DetailsProps> = ({ user }) => {
 
   // Trailer Modal State
   const [showTrailerModal, setShowTrailerModal] = useState(false);
+  const [showRelationGraph, setShowRelationGraph] = useState(false);
 
   // AI Recommendations
   const [aiRecs, setAiRecs] = useState<any[]>([]);
@@ -70,22 +78,41 @@ const Details: React.FC<DetailsProps> = ({ user }) => {
       setAiRecs([]);
       setThemes(null);
       setCustomDescriptions({});
+      setGalleryImages([]);
       
       try {
         const data = await anilistService.getAnimeDetails(parseInt(id));
         setAnime(data);
 
+        // Add to History
+        try {
+            await db.history.put({
+                id: `ANIME-${data.id}`,
+                mediaId: data.id,
+                type: 'ANIME',
+                title: data.title,
+                coverImage: data.coverImage.large,
+                bannerImage: data.bannerImage,
+                format: data.format,
+                status: data.status,
+                timestamp: Date.now()
+            });
+        } catch (dbErr) {
+            console.warn("Failed to save history", dbErr);
+        }
+
         // Fetch Custom Description
         const customContent = await firebaseService.getCustomDescription('anime', parseInt(id));
         if (customContent) {
             setCustomDescriptions(customContent);
-            // Auto select arabic if available and user might prefer it (simple check)
             if (customContent['ar']) setSelectedLang('ar');
         }
 
         if (data.idMal) {
             malService.getScore(data.idMal, 'anime').then(score => setMalScore(score));
             malService.getThemes(data.idMal).then(t => setThemes(t));
+            // Fetch Gallery
+            malService.getPictures(data.idMal, 'anime').then(pics => setGalleryImages(pics));
         }
 
         if (user) {
@@ -127,7 +154,6 @@ const Details: React.FC<DetailsProps> = ({ user }) => {
     };
   }, [id, user]);
 
-  // ... (Keep existing handlers: handleSaveEntry, handleAutoTrack, playEpisode, etc.)
   const handleSaveEntry = async (e: React.FormEvent, overrideEntry?: UserListEntry) => {
     if(e) e.preventDefault();
     if (!user || !anime) return;
@@ -289,12 +315,22 @@ const Details: React.FC<DetailsProps> = ({ user }) => {
       window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`, '_blank');
   };
 
-  if (loading || !anime) {
-    return <div className="h-[50vh] flex items-center justify-center text-slate-400">Loading details...</div>;
+  const nextImage = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (lightboxIndex !== null && lightboxIndex < galleryImages.length - 1) setLightboxIndex(lightboxIndex + 1);
+  };
+  const prevImage = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (lightboxIndex !== null && lightboxIndex > 0) setLightboxIndex(lightboxIndex - 1);
+  };
+
+  if (loading) {
+    return <OtakuLoader />;
   }
 
+  if (!anime) return <div className="p-10">Not found</div>;
+
   const streamLinks = anime.externalLinks?.filter(l => l.type === 'STREAMING') || [];
-  const officialLinks = anime.externalLinks?.filter(l => l.type !== 'STREAMING') || [];
   const currentDescription = selectedLang === 'original' ? anime.description : (customDescriptions[selectedLang] || anime.description);
 
   return (
@@ -316,6 +352,39 @@ const Details: React.FC<DetailsProps> = ({ user }) => {
                   >
                       <X className="w-6 h-6" /> Close Trailer
                   </button>
+              </div>
+          </div>
+      )}
+
+      {/* RELATION GRAPH MODAL */}
+      {showRelationGraph && (
+          <RelationGraph anime={anime} onClose={() => setShowRelationGraph(false)} />
+      )}
+
+      {/* Lightbox Modal */}
+      {lightboxIndex !== null && (
+          <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-4 backdrop-blur-md animate-fadeIn" onClick={() => setLightboxIndex(null)}>
+              <div className="relative max-w-6xl w-full h-full flex items-center justify-center">
+                  <img src={galleryImages[lightboxIndex]} alt="Gallery" className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl" onClick={e => e.stopPropagation()} />
+                  
+                  <button onClick={() => setLightboxIndex(null)} className="absolute top-4 right-4 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors">
+                      <X className="w-6 h-6" />
+                  </button>
+
+                  {lightboxIndex > 0 && (
+                      <button onClick={prevImage} className="absolute left-4 p-4 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors">
+                          <ChevronLeft className="w-8 h-8" />
+                      </button>
+                  )}
+                  {lightboxIndex < galleryImages.length - 1 && (
+                      <button onClick={nextImage} className="absolute right-4 p-4 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors">
+                          <ChevronRight className="w-8 h-8" />
+                      </button>
+                  )}
+                  
+                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 px-4 py-2 rounded-full text-white text-sm">
+                      {lightboxIndex + 1} / {galleryImages.length}
+                  </div>
               </div>
           </div>
       )}
@@ -350,7 +419,7 @@ const Details: React.FC<DetailsProps> = ({ user }) => {
           </div>
       )}
 
-      {/* Hero */}
+      {/* Hero and main content structure remains same... */}
       <div className="relative w-full h-[35vh] md:h-[50vh] overflow-hidden">
         <div className="absolute inset-0">
           <LazyImage 
@@ -364,7 +433,7 @@ const Details: React.FC<DetailsProps> = ({ user }) => {
 
       <div className="container mx-auto px-4 -mt-24 md:-mt-32 relative z-10">
         <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-8">
-          {/* Left Column */}
+          {/* Left Column (Poster & Buttons) */}
           <div className="space-y-6">
             <div className="relative group rounded-xl shadow-2xl overflow-hidden bg-dark-800 w-48 md:w-full mx-auto md:mx-0">
                 <LazyImage 
@@ -415,7 +484,7 @@ const Details: React.FC<DetailsProps> = ({ user }) => {
             </h1>
             <h2 className="text-xl text-slate-300 font-medium mb-6 opacity-80 italic">{anime.title.native}</h2>
             
-            {/* Description */}
+            {/* Description & AI */}
             <div className="mb-10 bg-dark-800/30 p-6 rounded-2xl border border-white/5 backdrop-blur-sm relative text-left">
                 {Object.keys(customDescriptions).length > 0 && (
                     <div className="flex justify-end mb-2">
@@ -446,32 +515,41 @@ const Details: React.FC<DetailsProps> = ({ user }) => {
                 </button>
             </div>
 
-            {/* AI Recommendations Section */}
-            <div className="mb-10 text-left">
+            <div className="mb-10 text-left flex flex-col md:flex-row gap-4">
                 <button 
                     onClick={getAIRecommendations}
                     disabled={loadingAiRecs}
-                    className="flex items-center gap-2 text-sm font-bold text-purple-400 hover:text-purple-300 transition-colors mb-4"
+                    className="flex items-center gap-2 text-sm font-bold text-purple-400 hover:text-purple-300 transition-colors"
                 >
                     <Sparkles className="w-4 h-4" /> 
                     {loadingAiRecs ? "Thinking..." : "Ask AI for Hybrid Recommendations"}
                 </button>
-                
-                {aiRecs.length > 0 && (
-                    <div className="grid gap-4 animate-fadeIn">
-                        {aiRecs.map((rec, i) => (
-                            <div key={i} className="bg-purple-900/10 border border-purple-500/20 p-4 rounded-xl flex items-start gap-4">
-                                <BrainCircuit className="w-6 h-6 text-purple-400 mt-1 shrink-0" />
-                                <div>
-                                    <h4 className="font-bold text-white">{rec.title}</h4>
-                                    <p className="text-sm text-slate-400 mt-1">{rec.reason}</p>
-                                    <Link to={`/search?q=${encodeURIComponent(rec.title)}`} className="text-xs text-purple-400 hover:underline mt-2 block">Find this Anime &rarr;</Link>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
+
+                {/* RELATION WEB BUTTON */}
+                {(anime.relations?.edges?.length || 0) > 0 && (
+                    <button 
+                        onClick={() => setShowRelationGraph(true)}
+                        className="flex items-center gap-2 text-sm font-bold text-blue-400 hover:text-blue-300 transition-colors"
+                    >
+                        <Network className="w-4 h-4" /> View Relation Web
+                    </button>
                 )}
             </div>
+            
+            {aiRecs.length > 0 && (
+                <div className="grid gap-4 animate-fadeIn mb-8 text-left">
+                    {aiRecs.map((rec, i) => (
+                        <div key={i} className="bg-purple-900/10 border border-purple-500/20 p-4 rounded-xl flex items-start gap-4">
+                            <BrainCircuit className="w-6 h-6 text-purple-400 mt-1 shrink-0" />
+                            <div>
+                                <h4 className="font-bold text-white">{rec.title}</h4>
+                                <p className="text-sm text-slate-400 mt-1">{rec.reason}</p>
+                                <Link to={`/search?q=${encodeURIComponent(rec.title)}`} className="text-xs text-purple-400 hover:underline mt-2 block">Find this Anime &rarr;</Link>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
 
             {/* Tabs */}
             <div className="border-b border-white/10 mb-8 flex gap-8 overflow-x-auto pb-1 no-scrollbar justify-start">
@@ -481,6 +559,7 @@ const Details: React.FC<DetailsProps> = ({ user }) => {
                 {id: 'music', label: 'Soundtrack', icon: Music},
                 {id: 'characters', label: 'Characters', icon: Users},
                 {id: 'staff', label: 'Staff', icon: Briefcase},
+                {id: 'gallery', label: 'Gallery', icon: ImageIcon},
                 {id: 'recommendations', label: 'Recommendations', icon: ThumbsUp},
                 {id: 'discussions', label: 'Discussions', icon: MessageSquare},
               ].map((tab) => (
@@ -501,8 +580,7 @@ const Details: React.FC<DetailsProps> = ({ user }) => {
             <div className="min-h-[400px] text-left">
               {activeTab === 'overview' && (
                 <div className="space-y-8 animate-fadeIn">
-                  
-                  {/* Streaming & Trailer Section */}
+                  {/* ... Streaming & Trailer (keep existing) ... */}
                   {(streamLinks.length > 0 || anime.trailer?.site === 'youtube') && (
                       <div className="grid md:grid-cols-2 gap-6">
                           {anime.trailer?.site === 'youtube' && (
@@ -552,7 +630,7 @@ const Details: React.FC<DetailsProps> = ({ user }) => {
                       </div>
                   )}
 
-                  {/* Rankings & Info */}
+                  {/* Rankings & Info (Keep existing) */}
                   <div className="bg-dark-800 rounded-2xl border border-white/5 overflow-hidden">
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-white/5">
                           <InfoItem label="Format" value={anime.format} />
@@ -573,42 +651,25 @@ const Details: React.FC<DetailsProps> = ({ user }) => {
                       </div>
                   </div>
 
-                  {/* External Info Links */}
-                  {officialLinks.length > 0 && (
-                      <div className="flex flex-wrap gap-3">
-                          {officialLinks.map((link, i) => (
-                              <a 
-                                key={i} 
-                                href={link.url} 
-                                target="_blank" 
-                                rel="noreferrer"
-                                className="px-4 py-2 bg-dark-800 rounded-full border border-white/10 text-xs font-bold hover:bg-white/10 flex items-center gap-2 text-slate-300"
-                              >
-                                  {link.site} <ExternalLink className="w-3 h-3" />
-                              </a>
-                          ))}
-                      </div>
-                  )}
-
                   {/* Relations */}
-                  {anime.relations && anime.relations.edges && anime.relations.edges.length > 0 && (
+                  {anime.relations?.edges?.length > 0 && (
                       <div>
                           <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-white"><LinkIcon className="w-5 h-5 text-primary" /> Related Media</h3>
                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                              {(anime.relations.edges as any[]).map((edge: any) => (
+                              {anime.relations.edges.map((edge: any) => (
                                   edge.node && (
-                                    <Link 
-                                        to={edge.node.type === 'MANGA' ? `/manga/${edge.node.id}` : `/anime/${edge.node.id}`} 
-                                        key={edge.node.id} 
-                                        className="bg-dark-800 p-3 rounded-xl flex gap-4 items-center border border-white/5 hover:border-primary/50 hover:bg-dark-700 transition-all group"
-                                    >
-                                        <LazyImage src={edge.node.coverImage.medium} className="w-14 h-20 object-cover rounded-lg shadow-md shrink-0" alt="" />
-                                        <div className="min-w-0">
-                                            <div className="text-[10px] font-bold text-primary uppercase mb-1 tracking-wide">{edge.relationType.replace('_', ' ')}</div>
-                                            <h4 className="font-bold text-sm text-white truncate group-hover:text-primary transition-colors">{edge.node.title.english || edge.node.title.romaji}</h4>
-                                            <div className="text-xs text-slate-500 mt-1">{edge.node.format} • {edge.node.type}</div>
-                                        </div>
-                                    </Link>
+                                  <Link 
+                                      to={edge.node.type === 'MANGA' ? `/manga/${edge.node.id}` : `/anime/${edge.node.id}`} 
+                                      key={edge.node.id} 
+                                      className="bg-dark-800 p-3 rounded-xl flex gap-4 items-center border border-white/5 hover:border-primary/50 hover:bg-dark-700 transition-all group"
+                                  >
+                                      <LazyImage src={edge.node.coverImage.medium} className="w-14 h-20 object-cover rounded-lg shadow-md shrink-0" alt="" />
+                                      <div className="min-w-0">
+                                          <div className="text-[10px] font-bold text-primary uppercase mb-1 tracking-wide">{edge.relationType.replace('_', ' ')}</div>
+                                          <h4 className="font-bold text-sm text-white truncate group-hover:text-primary transition-colors">{edge.node.title.english || edge.node.title.romaji}</h4>
+                                          <div className="text-xs text-slate-500 mt-1">{edge.node.format} • {edge.node.type}</div>
+                                      </div>
+                                  </Link>
                                   )
                               ))}
                           </div>
@@ -632,7 +693,7 @@ const Details: React.FC<DetailsProps> = ({ user }) => {
                 </div>
               )}
 
-              {/* ... Rest of tabs (episodes, music, etc.) remain unchanged ... */}
+              {/* EPISODES TAB (Updated with FillerBadge) */}
               {activeTab === 'episodes' && (
                   <div className="animate-fadeIn">
                       {anime.nextAiringEpisode && (
@@ -670,7 +731,10 @@ const Details: React.FC<DetailsProps> = ({ user }) => {
                                       <div className="flex-1 min-w-0 cursor-pointer" onClick={() => playEpisode(ep)}>
                                           <div className="flex items-center gap-2 mb-1">
                                               <span className="text-primary font-bold text-sm">Episode {ep.number}</span>
-                                              {ep.isFiller && <span className="text-[10px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded">Filler</span>}
+                                              
+                                              {/* FILLER BADGE ADDED HERE */}
+                                              <FillerBadge animeId={anime.id} episodeNumber={ep.number} />
+
                                               {source?.audio && <span className="text-[10px] bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded uppercase">{source.audio}</span>}
                                               {ep.language && <span className="text-[10px] bg-white/10 text-slate-300 px-1.5 py-0.5 rounded">{ep.language}</span>}
                                           </div>
@@ -715,80 +779,37 @@ const Details: React.FC<DetailsProps> = ({ user }) => {
                   </div>
               )}
 
-              {activeTab === 'music' && (
-                  <div className="animate-fadeIn space-y-6">
-                      {!themes || (themes.openings.length === 0 && themes.endings.length === 0) ? (
-                          <div className="text-center py-12 bg-dark-800 rounded-xl border border-white/5">
-                              <Disc className="w-12 h-12 text-slate-600 mx-auto mb-3 opacity-50" />
-                              <p className="text-slate-400">No theme songs found.</p>
-                          </div>
-                      ) : (
-                          <div className="grid md:grid-cols-2 gap-8">
-                              <div className="space-y-4">
-                                  <h3 className="font-bold flex items-center gap-2 text-lg text-primary"><PlayCircle className="w-5 h-5" /> Openings</h3>
-                                  {themes.openings.map((theme, i) => (
-                                      <div key={i} className="bg-dark-800 p-4 rounded-xl border border-white/5 flex items-center justify-between group">
-                                          <div className="flex items-center gap-3 min-w-0">
-                                              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">{i + 1}</div>
-                                              <div className="truncate text-sm text-slate-300 font-medium pr-2">{theme}</div>
-                                          </div>
-                                          <div className="flex gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                              {spotifyToken ? (
-                                                  <button onClick={() => playThemeOnSpotify(theme)} className="p-2 bg-[#1DB954]/10 text-[#1DB954] rounded-full hover:bg-[#1DB954]/20 transition-colors"><Headphones className="w-4 h-4" /></button>
-                                              ) : (
-                                                  <button onClick={() => showToast("Connect Spotify in Settings", "info")} className="p-2 bg-white/5 text-slate-500 rounded-full hover:bg-white/10"><Headphones className="w-4 h-4" /></button>
-                                              )}
-                                              <button onClick={() => openYouTubeSearch(theme)} className="p-2 bg-red-500/10 text-red-500 rounded-full hover:bg-red-500/20 transition-colors"><ExternalLink className="w-4 h-4" /></button>
-                                          </div>
-                                      </div>
-                                  ))}
-                              </div>
-                              <div className="space-y-4">
-                                  <h3 className="font-bold flex items-center gap-2 text-lg text-blue-400"><Disc className="w-5 h-5" /> Endings</h3>
-                                  {themes.endings.map((theme, i) => (
-                                      <div key={i} className="bg-dark-800 p-4 rounded-xl border border-white/5 flex items-center justify-between group">
-                                          <div className="flex items-center gap-3 min-w-0">
-                                              <div className="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center text-xs font-bold text-blue-400 shrink-0">{i + 1}</div>
-                                              <div className="truncate text-sm text-slate-300 font-medium pr-2">{theme}</div>
-                                          </div>
-                                          <div className="flex gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                              {spotifyToken ? (
-                                                  <button onClick={() => playThemeOnSpotify(theme)} className="p-2 bg-[#1DB954]/10 text-[#1DB954] rounded-full hover:bg-[#1DB954]/20 transition-colors"><Headphones className="w-4 h-4" /></button>
-                                              ) : (
-                                                  <button onClick={() => showToast("Connect Spotify in Settings", "info")} className="p-2 bg-white/5 text-slate-500 rounded-full hover:bg-white/10"><Headphones className="w-4 h-4" /></button>
-                                              )}
-                                              <button onClick={() => openYouTubeSearch(theme)} className="p-2 bg-red-500/10 text-red-500 rounded-full hover:bg-red-500/20 transition-colors"><ExternalLink className="w-4 h-4" /></button>
-                                          </div>
-                                      </div>
-                                  ))}
-                              </div>
-                          </div>
-                      )}
-                  </div>
-              )}
-
+              {/* CHARACTERS TAB */}
               {activeTab === 'characters' && (
                 <div className="animate-fadeIn">
                     <div className="flex gap-2 mb-6 bg-dark-800 p-1 rounded-lg w-fit">
-                        <button onClick={() => setCharRole('MAIN')} className={`px-6 py-2 rounded-md text-sm font-bold transition-all ${charRole === 'MAIN' ? 'bg-primary text-white shadow' : 'text-slate-400 hover:text-white'}`}>Main</button>
+                        <button onClick={() => setCharRole('MAIN')} className={`px-6 py-2 rounded-md text-sm font-bold transition-all ${charRole === 'MAIN' ? 'bg-primary text-white shadow' : 'text-slate-400 hover:text-white'}`}>Main Cast</button>
                         <button onClick={() => setCharRole('SUPPORTING')} className={`px-6 py-2 rounded-md text-sm font-bold transition-all ${charRole === 'SUPPORTING' ? 'bg-primary text-white shadow' : 'text-slate-400 hover:text-white'}`}>Supporting</button>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {anime.characters?.edges.filter(edge => edge.role === charRole).map((edge, index) => (
-                        <Link to={`/character/${edge.node.id}`} key={`${edge.node.id}-${index}`} className="flex items-center gap-4 bg-dark-800 p-4 rounded-xl border border-white/5 hover:border-primary/50 transition-all group">
-                            <LazyImage src={edge.node.image.medium} alt={edge.node.name.full} className="w-16 h-16 rounded-full object-cover shadow-lg" />
-                            <div>
-                                <div className="font-bold text-white group-hover:text-primary transition-colors">{edge.node.name.full}</div>
-                                {edge.voiceActors && edge.voiceActors.length > 0 && (
-                                    <div className="text-xs text-slate-400 mt-1">{edge.voiceActors[0]?.name.full} ({edge.voiceActors[0]?.languageV2})</div>
-                                )}
-                            </div>
-                        </Link>
+                        <div key={`${edge.node.id}-${index}`} className="flex items-center justify-between bg-dark-800 p-4 rounded-xl border border-white/5 hover:border-primary/50 transition-all group">
+                            <Link to={`/character/${edge.node.id}`} className="flex items-center gap-4">
+                                <LazyImage src={edge.node.image.medium} alt={edge.node.name.full} className="w-16 h-16 rounded-full object-cover shadow-lg" />
+                                <div>
+                                    <div className="font-bold text-white group-hover:text-primary transition-colors">{edge.node.name.full}</div>
+                                    <div className="text-xs text-slate-500">{edge.role}</div>
+                                </div>
+                            </Link>
+                            {edge.voiceActors && edge.voiceActors.length > 0 && (
+                                <Link to={`/staff/${edge.voiceActors[0].id}`} className="flex flex-col items-end text-right">
+                                    <LazyImage src={edge.voiceActors[0].image.medium} alt={edge.voiceActors[0].name.full} className="w-10 h-10 rounded-full object-cover mb-1 opacity-80 hover:opacity-100" />
+                                    <div className="text-[10px] font-bold text-slate-300">{edge.voiceActors[0].name.full}</div>
+                                    <div className="text-[10px] text-slate-500">{edge.voiceActors[0].languageV2}</div>
+                                </Link>
+                            )}
+                        </div>
                     ))}
                     </div>
                 </div>
               )}
 
+              {/* STAFF TAB */}
               {activeTab === 'staff' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 animate-fadeIn">
                   {anime.staff?.edges?.map((edge, i) => (
@@ -803,6 +824,7 @@ const Details: React.FC<DetailsProps> = ({ user }) => {
                 </div>
               )}
 
+              {/* RECOMMENDATIONS TAB */}
               {activeTab === 'recommendations' && (
                   <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6 animate-fadeIn">
                       {anime.recommendations?.nodes.map((rec, i) => (
@@ -816,6 +838,7 @@ const Details: React.FC<DetailsProps> = ({ user }) => {
                   </div>
               )}
 
+              {/* DISCUSSIONS TAB */}
               {activeTab === 'discussions' && (
                   <div className="animate-fadeIn space-y-6">
                       {user && (
@@ -828,9 +851,9 @@ const Details: React.FC<DetailsProps> = ({ user }) => {
                           </form>
                       )}
                       <div className="space-y-4">
-                          {discussions.map(post => {
-                              if (post.isHidden) return null; // Skip hidden posts
-                              return (
+                          {discussions.length === 0 && <div className="text-center text-slate-500 py-8">No comments yet.</div>}
+                          {discussions.map(post => (
+                              !post.isHidden && (
                                 <div key={post.id} className={`bg-dark-800 p-5 rounded-xl border ${post.isFlagged ? 'border-red-500/30' : 'border-white/5'}`}>
                                     <div className="flex justify-between mb-3 items-center">
                                         <div className="flex items-center gap-2">
@@ -846,7 +869,64 @@ const Details: React.FC<DetailsProps> = ({ user }) => {
                                     </div>
                                 </div>
                               )
-                          })}
+                          ))}
+                      </div>
+                  </div>
+              )}
+
+              {/* MUSIC TAB */}
+              {activeTab === 'music' && (
+                  <div className="grid md:grid-cols-2 gap-8 animate-fadeIn">
+                      <div className="space-y-4">
+                          <h3 className="text-lg font-bold text-white flex items-center gap-2"><Disc className="w-5 h-5 text-primary" /> Openings</h3>
+                          {themes?.openings?.length ? (
+                              themes.openings.map((theme, i) => (
+                                  <div key={i} className="bg-dark-800 p-3 rounded-lg border border-white/5 flex items-center gap-3 group hover:border-primary/30 transition-colors">
+                                      <span className="text-primary font-bold text-xs bg-primary/10 px-2 py-1 rounded">OP {i+1}</span>
+                                      <span className="text-sm truncate flex-1">{theme.replace(/"/g, '')}</span>
+                                      <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                          <button onClick={() => playThemeOnSpotify(theme)} className="p-1.5 bg-[#1DB954] text-black rounded hover:scale-110 transition-transform"><Music className="w-3 h-3" /></button>
+                                          <button onClick={() => openYouTubeSearch(theme)} className="p-1.5 bg-[#FF0000] text-white rounded hover:scale-110 transition-transform"><PlayCircle className="w-3 h-3" /></button>
+                                      </div>
+                                  </div>
+                              ))
+                          ) : <div className="text-slate-500 italic">No openings found.</div>}
+                      </div>
+                      <div className="space-y-4">
+                          <h3 className="text-lg font-bold text-white flex items-center gap-2"><Disc className="w-5 h-5 text-pink-500" /> Endings</h3>
+                          {themes?.endings?.length ? (
+                              themes.endings.map((theme, i) => (
+                                  <div key={i} className="bg-dark-800 p-3 rounded-lg border border-white/5 flex items-center gap-3 group hover:border-pink-500/30 transition-colors">
+                                      <span className="text-pink-500 font-bold text-xs bg-pink-500/10 px-2 py-1 rounded">ED {i+1}</span>
+                                      <span className="text-sm truncate flex-1">{theme.replace(/"/g, '')}</span>
+                                      <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                          <button onClick={() => playThemeOnSpotify(theme)} className="p-1.5 bg-[#1DB954] text-black rounded hover:scale-110 transition-transform"><Music className="w-3 h-3" /></button>
+                                          <button onClick={() => openYouTubeSearch(theme)} className="p-1.5 bg-[#FF0000] text-white rounded hover:scale-110 transition-transform"><PlayCircle className="w-3 h-3" /></button>
+                                      </div>
+                                  </div>
+                              ))
+                          ) : <div className="text-slate-500 italic">No endings found.</div>}
+                      </div>
+                  </div>
+              )}
+
+              {/* GALLERY TAB */}
+              {activeTab === 'gallery' && (
+                  <div className="animate-fadeIn">
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                          {galleryImages.map((src, idx) => (
+                              <div key={idx} className="relative group cursor-zoom-in aspect-[2/3] overflow-hidden rounded-xl bg-dark-800" onClick={() => setLightboxIndex(idx)}>
+                                  <LazyImage src={src} alt="Gallery Image" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                                  <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                      <ImageIcon className="w-8 h-8 text-white" />
+                                  </div>
+                              </div>
+                          ))}
+                          {galleryImages.length === 0 && (
+                              <div className="col-span-full text-center py-12 text-slate-500">
+                                  No gallery images found.
+                              </div>
+                          )}
                       </div>
                   </div>
               )}
@@ -855,7 +935,7 @@ const Details: React.FC<DetailsProps> = ({ user }) => {
         </div>
       </div>
 
-      {/* Edit Modal (Existing) */}
+      {/* Edit Modal (Keep existing) */}
       {isListModalOpen && (
           <div className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setIsListModalOpen(false)}>
               <div className="bg-dark-800 w-full max-w-xl rounded-2xl border border-white/10 overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -863,7 +943,7 @@ const Details: React.FC<DetailsProps> = ({ user }) => {
                       <h3 className="text-xl font-bold text-white">Edit List Entry</h3>
                       <button onClick={() => setIsListModalOpen(false)} className="text-slate-400 hover:text-white"><X className="w-6 h-6" /></button>
                   </div>
-                  <form onSubmit={(e) => handleSaveEntry(e)} className="p-8 space-y-6">
+                  <form onSubmit={(e) => handleSaveEntry(e)} className="p-8 space-y-6 max-h-[80vh] overflow-y-auto custom-scrollbar">
                       <div className="grid grid-cols-2 gap-6">
                           <div>
                               <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Status</label>
@@ -883,7 +963,7 @@ const Details: React.FC<DetailsProps> = ({ user }) => {
                               <span className="text-slate-400 font-bold whitespace-nowrap">/ {anime.episodes || '?'}</span>
                           </div>
                       </div>
-                      <button type="submit" disabled={saving} className="w-full bg-primary hover:bg-blue-600 text-white font-bold py-4 rounded-xl transition-all shadow-lg">{saving ? 'Saving...' : 'Save Entry'}</button>
+                      <button type="submit" disabled={saving} className="w-full bg-primary hover:bg-blue-600 text-white font-bold py-4 rounded-xl transition-all shadow-lg hover:shadow-primary/25 disabled:opacity-50 disabled:cursor-not-allowed">{saving ? 'Saving...' : 'Save Entry'}</button>
                   </form>
               </div>
           </div>
