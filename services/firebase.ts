@@ -17,7 +17,8 @@ import {
   Club, ChatMessage, WatchParty, Episode, ManualChapter, 
   CollectedCharacter, SupportChat, SupportMessage, AIFeatureConfig, 
   AppBranding, XPRewardsConfig, AILimitsConfig, UserSettings, SavedSearch,
-  MediaType, UserRecommendation, DiscussionPost, CharacterComment, CustomList
+  MediaType, UserRecommendation, DiscussionPost, CharacterComment, CustomList,
+  PartyEvent
 } from '../types';
 
 class FirebaseService {
@@ -388,6 +389,23 @@ class FirebaseService {
   async sendPartyMessage(partyId: string, msg: ChatMessage) {
       if (!this.db) return;
       await addDoc(collection(this.db, "watch_parties", partyId, "messages"), msg);
+  }
+
+  subscribeToPartyEvents(partyId: string, cb: (events: PartyEvent[]) => void) {
+      if (!this.db) return () => {};
+      const q = query(
+          collection(this.db, "watch_parties", partyId, "events"),
+          orderBy("timestamp", "asc"),
+          where("timestamp", ">", Date.now() - 5000) // Only listen to recent events
+      );
+      return onSnapshot(q, (snap) => {
+          cb(snap.docChanges().filter(change => change.type === 'added').map(change => ({ id: change.doc.id, ...change.doc.data() } as PartyEvent)));
+      });
+  }
+
+  async sendPartyEvent(partyId: string, event: PartyEvent) {
+      if (!this.db) return;
+      await addDoc(collection(this.db, "watch_parties", partyId, "events"), event);
   }
 
   // --- System & Config ---
