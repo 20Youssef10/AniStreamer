@@ -466,6 +466,13 @@ export interface WatchParty {
   status: 'active' | 'ended';
 }
 
+export interface PartyEvent {
+  id?: string;
+  type: 'sfx';
+  payload: any;
+  timestamp: number;
+}
+
 export type ToastType = 'success' | 'error' | 'info';
 
 export interface ToastMessage {
