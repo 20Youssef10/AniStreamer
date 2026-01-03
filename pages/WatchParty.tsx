@@ -65,24 +65,23 @@ const WatchParty: React.FC = () => {
 
     const unsubMessages = firebaseService.subscribeToPartyMessages(activePartyId, (msgs) => {
         setMessages(msgs);
-        setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
-    });
+        
+        // Check last message for sound trigger (Simple hack implementation for realtime SFX)
+        // In a robust app, use a separate 'events' collection or ephemeral signals
+        const lastMsg = msgs[msgs.length - 1];
+        if (lastMsg && lastMsg.timestamp > Date.now() - 2000 && lastMsg.type === 'system' && lastMsg.content.startsWith('SFX:')) {
+            const sfxKey = lastMsg.content.split(':')[1];
+            const audio = new Audio(sounds[sfxKey as keyof typeof sounds]);
+            audio.volume = 0.5;
+            audio.play().catch(() => {});
+        }
 
-    const unsubEvents = firebaseService.subscribeToPartyEvents(activePartyId, (events) => {
-        events.forEach(event => {
-            if (event.type === 'sfx') {
-                const sfxKey = event.payload.sfx;
-                const audio = new Audio(sounds[sfxKey as keyof typeof sounds]);
-                audio.volume = 0.5;
-                audio.play().catch(() => {});
-            }
-        });
+        setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     });
 
     return () => {
         unsubParty();
         unsubMessages();
-        unsubEvents();
     };
   }, [activePartyId, user]);
 
@@ -158,16 +157,15 @@ const WatchParty: React.FC = () => {
 
   const triggerSound = async (sfx: string) => {
       if (!activePartyId || !user) return;
-      await firebaseService.sendPartyEvent(activePartyId, {
-          type: 'sfx',
-          payload: { sfx },
-          timestamp: Date.now()
+      await firebaseService.sendPartyMessage(activePartyId, {
+          userId: user.uid,
+          userName: user.displayName || 'Guest',
+          content: `SFX:${sfx}`,
+          timestamp: Date.now(),
+          type: 'system'
       });
-      // We don't play locally immediately here because we want to rely on the event subscription
-      // to play it for everyone including the sender, ensuring synchronization.
-      // However, for immediate feedback we could play it, but let's stick to the event stream
-      // to avoid double playing if the latency is low, or check if the event is from us.
-      // Given the requirement for robust implementation, relying on the event stream is better.
+      // Play locally immediately for responsiveness
+      new Audio(sounds[sfx as keyof typeof sounds]).play().catch(()=>{});
   };
 
   if (activePartyId && activeParty) {

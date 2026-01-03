@@ -1,4 +1,3 @@
-
 export interface AppConfig {
   firebase: {
     apiKey: string;
@@ -375,7 +374,7 @@ export interface MangaChapter {
   language: string;
   pages?: number; // count
   publishAt: string | number;
-  source: 'dex' | 'hook' | 'manual' | 'olympus';
+  source: 'dex' | 'hook' | 'manual';
 }
 
 export interface CustomList {
@@ -464,13 +463,6 @@ export interface WatchParty {
   isPlaying: boolean;
   participants: string[];
   status: 'active' | 'ended';
-}
-
-export interface PartyEvent {
-  id?: string;
-  type: 'sfx';
-  payload: any;
-  timestamp: number;
 }
 
 export type ToastType = 'success' | 'error' | 'info';
@@ -582,7 +574,6 @@ export interface UserSettings {
     socialAlerts: boolean;
   };
   quickActions: ('list' | 'favorite' | 'share' | 'planning' | 'completed')[];
-  youtubeApiKey?: string;
 }
 
 export interface AppBranding {
@@ -641,7 +632,7 @@ export interface SourceChapter {
   language: string;
   date: number;
   volume?: string;
-  source?: 'dex' | 'hook' | 'manual' | 'olympus';
+  source?: 'dex' | 'hook' | 'manual';
 }
 
 export interface AppNotification {

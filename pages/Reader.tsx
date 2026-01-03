@@ -11,7 +11,6 @@ import LazyImage from '../components/LazyImage';
 import { useToast } from '../context/ToastContext';
 import { useSettings } from '../context/SettingsContext';
 import { db } from '../services/db'; 
-import ZenReader from '../components/ZenReader';
 
 const Reader: React.FC = () => {
   const [viewMode, setViewMode] = useState<'LIBRARY' | 'CHAPTERS' | 'READING'>('LIBRARY');
@@ -190,6 +189,11 @@ const Reader: React.FC = () => {
       for (let i = 0; i < pages.length; i += 2) {
           const chunk = [pages[i], pages[i + 1]].filter(Boolean);
           // If RTL, swap order for display so visual [Left][Right] becomes [Page N+1][Page N]
+          // Actually standard reading is [Page N][Page N-1] in visual order if your eyes go Right to Left.
+          // But web flex-row is Left to Right. 
+          // If RTL, we want [Page Next] [Page Curr] so Page Curr is on Right? 
+          // Standard Manga: Page 1 is on the Right. Page 2 is on the Left.
+          // So chunk [p1, p2] should look like [p2][p1] visually.
           if (settings.reader.direction === 'rtl' && chunk.length === 2) {
               chunks.push([chunk[1], chunk[0]]);
           } else {
@@ -224,11 +228,6 @@ const Reader: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 py-8 relative">
-        {/* INJECT ZEN READER HERE */}
-        {activeManga && activeManga.genres && (
-            <ZenReader genres={activeManga.genres} />
-        )}
-
         {viewMode === 'CHAPTERS' && (
             <div className="bg-dark-800 rounded-2xl border border-white/5 overflow-hidden">
                 <div className="p-4 border-b border-white/5 flex justify-between items-center">

@@ -2,8 +2,10 @@
 import { AppConfig, AnimeSort } from './types';
 
 // --- SERVER CONFIGURATION ---
-// App is now frontend-only.
-export const API_BASE_URL = "";
+// In production, this can be set via Vite environment variables (VITE_API_URL).
+// If not found, it defaults to localhost. 
+// You can also override this via config.txt after deployment.
+export const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || "http://localhost:3000";
 
 // Fallback config if config.txt fails or is missing
 export const DEFAULT_CONFIG: AppConfig = {

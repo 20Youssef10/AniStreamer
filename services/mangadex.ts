@@ -1,5 +1,9 @@
 
 import { MangaSource, SourceChapter, SourceManga, MangaChapter } from '../types';
+import { API_BASE_URL } from '../constants';
+
+const PROXY_URL = 'https://corsproxy.io/?';
+const API_URL = 'https://api.mangadex.org';
 
 class MangadexService implements MangaSource {
   id = 'mangadex';
@@ -7,9 +11,6 @@ class MangadexService implements MangaSource {
   version = '1.0.0';
   icon = 'https://mangadex.org/favicon.ico';
   isNsfw = false;
-  
-  // Use public CORS proxy since we don't have a backend
-  private proxyUrl = 'https://corsproxy.io/?';
 
   /**
    * Search for a manga by title
@@ -17,9 +18,8 @@ class MangadexService implements MangaSource {
   async searchManga(query: string): Promise<SourceManga[]> {
     if (!query) return [];
     try {
-      const url = `https://api.mangadex.org/manga?title=${encodeURIComponent(query)}&limit=10&contentRating[]=safe&contentRating[]=suggestive&includes[]=cover_art`;
-      // Fetch via proxy
-      const response = await fetch(this.proxyUrl + encodeURIComponent(url));
+      // Use local backend proxy via API_BASE_URL for reliable search
+      const response = await fetch(`${API_BASE_URL}/api/mangadex/search?title=${encodeURIComponent(query)}`);
       
       if (!response.ok) throw new Error(`MangaDex API error: ${response.status}`);
       
@@ -52,8 +52,7 @@ class MangadexService implements MangaSource {
    */
   async getChapters(mangaId: string): Promise<SourceChapter[]> {
     try {
-      const url = `https://api.mangadex.org/manga/${mangaId}/feed?order[chapter]=desc&limit=500`;
-      const response = await fetch(this.proxyUrl + encodeURIComponent(url));
+      const response = await fetch(`${API_BASE_URL}/api/mangadex/chapters/${mangaId}`);
 
       if (!response.ok) throw new Error(`MangaDex API error: ${response.status}`);
 
@@ -79,8 +78,7 @@ class MangadexService implements MangaSource {
    */
   async getPages(chapterId: string): Promise<string[]> {
     try {
-      const url = `https://api.mangadex.org/at-home/server/${chapterId}`;
-      const response = await fetch(this.proxyUrl + encodeURIComponent(url));
+      const response = await fetch(`${API_BASE_URL}/api/mangadex/pages/${chapterId}`);
 
       if (!response.ok) throw new Error(`MangaDex API error: ${response.status}`);
       
@@ -94,9 +92,6 @@ class MangadexService implements MangaSource {
       const hash = data.chapter.hash;
       const files = data.chapter.data;
 
-      // Note: MangaDex images usually require CORS proxying too if rendered in <img /> canvas manipulations,
-      // but standard <img src="..." /> often works if Referer isn't checked strictly.
-      // If it fails, prepending proxyUrl to each image might be needed.
       return files.map((file: string) => `${baseUrl}/data/${hash}/${file}`);
     } catch (error) {
       console.error('MangaDex Pages Error:', error);

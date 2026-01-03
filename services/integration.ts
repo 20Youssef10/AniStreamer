@@ -1,7 +1,7 @@
 
 import { firebaseService } from './firebase';
 import { anilistService } from './anilist';
-import { UserListEntry, Anime } from '../types';
+import { UserListEntry, MediaType } from '../types';
 
 class IntegrationService {
     
@@ -49,8 +49,7 @@ class IntegrationService {
         // Batch map MAL IDs to AniList IDs
         const malIds = parsed.map(p => p.malId);
         const mapped = await anilistService.getAnimeByMalIds(malIds);
-        // Explicitly type the map to allow correct lookups
-        const mapDict = new Map<number, Anime>(mapped.map(m => [m.idMal || 0, m]));
+        const mapDict = new Map(mapped.map(m => [m.idMal, m]));
 
         const finalList: UserListEntry[] = [];
         let processed = 0;

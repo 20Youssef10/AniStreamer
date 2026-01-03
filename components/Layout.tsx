@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   Search, Home, User, LogOut, Menu, X, Camera, Smile, Shuffle, Moon, Sun, 
   Settings, Calendar, Gamepad2, Newspaper, Image, RefreshCw, Book, 
-  BarChart2, Brain, Box, Users, Radio, GitCompare, Code, Activity, MoreHorizontal, ChevronDown, Tv, ShieldAlert, Bell, AtSign, Layers, Timer, Cake, MessageCircle, BarChart, BookOpen, Mic, Trophy, Globe, Sparkles, Zap, Clock, Info, Music, Sword, Lock, ArrowUp, Keyboard, Wifi, Quote, History
+  BarChart2, Brain, Box, Users, Radio, GitCompare, Code, Activity, MoreHorizontal, ChevronDown, Tv, ShieldAlert, Bell, AtSign, Layers, Timer, Cake, MessageCircle, BarChart, BookOpen, Mic, Trophy, Globe, Sparkles, Zap, Clock, Info, Music, Sword, Lock, ArrowUp, Keyboard, Wifi, Quote
 } from 'lucide-react';
 import { useSettings } from '../context/SettingsContext';
 import { useToast } from '../context/ToastContext';
@@ -255,13 +255,11 @@ const Layout: React.FC<LayoutProps> = ({ children, user }) => {
   const allNavItems = [
     { id: 'home', label: t('home', settings.language), path: '/', icon: Home, category: 'main' },
     { id: 'anime', label: 'Anime', path: '/anime', icon: Tv, category: 'main' },
-    { id: 'history', label: 'History', path: '/history', icon: History, category: 'main' }, // New
     { id: 'ai_studio', label: 'AI Studio', path: '/ai-studio', icon: Sparkles, category: 'main' },
     { id: 'manga', label: 'Manga', path: '/search?type=MANGA', icon: Book, category: 'main' },
     { id: 'isekai', label: 'Isekai RPG', path: '/isekai', icon: Sword, category: 'main' },
     { id: 'music', label: 'Music', path: '/media?tab=music', icon: Music, category: 'main' },
     { id: 'upcoming', label: 'Coming Soon', path: '/upcoming', icon: Clock, category: 'main' },
-    { id: 'global_stats', label: 'Global Stats', path: '/global-stats', icon: Globe, category: 'main' },
     { id: 'news', label: 'News', path: '/news', icon: Newspaper, category: 'main' },
     { id: 'feed', label: 'Feed', path: '/feed', icon: Activity, category: 'social' },
     { id: 'community', label: 'Community', path: '/community', icon: Users, category: 'social' },
@@ -269,8 +267,8 @@ const Layout: React.FC<LayoutProps> = ({ children, user }) => {
     { id: 'party', label: 'Watch Party', path: '/party', icon: Radio, category: 'social' },
     { id: 'calendar', label: 'Calendar', path: '/calendar', icon: Calendar, category: 'tools' },
     { id: 'focus', label: 'Focus Dojo', path: '/focus', icon: Timer, category: 'tools' },
-    { id: 'ranking', label: 'Global Rank', path: '/ranking', icon: Trophy, category: 'tools' },
-    { id: 'top_chars', label: 'Top Characters', path: '/top-characters', icon: User, category: 'tools' },
+    { id: 'ranking', label: 'Global Rank', path: '/ranking', icon: Globe, category: 'tools' },
+    { id: 'top_chars', label: 'Top Characters', path: '/top-characters', icon: Trophy, category: 'tools' },
     { id: 'leaderboard', label: 'Leaderboard', path: '/leaderboard', icon: BarChart, category: 'tools' },
     { id: 'reader', label: 'Manga Reader', path: '/reader', icon: BookOpen, category: 'tools' },
     { id: 'games', label: 'Games', path: '/games', icon: Gamepad2, category: 'tools' },
@@ -280,6 +278,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user }) => {
     { id: 'identify', label: 'Identify', path: '/identify', icon: Camera, category: 'ai' },
     { id: 'ar', label: t('arHub', settings.language), path: '/ar', icon: Box, category: 'ai' },
     { id: 'about', label: 'About Us', path: '/about', icon: Info, category: 'main' },
+    // New Feature Links
     { id: 'speed', label: 'Speed Test', path: '/speed-test', icon: Wifi, category: 'tools' },
     { id: 'quotes', label: 'Quotes', path: '/quotes', icon: Quote, category: 'tools' },
   ];

@@ -6,15 +6,18 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "node server.js"
   },
   "dependencies": {
     "@google/genai": "^0.0.19",
     "@sentry/react": "^8.47.0",
     "@tanstack/react-query": "^5.62.0",
     "canvas-confetti": "^1.9.3",
+    "cors": "^2.8.5",
     "dexie": "^4.0.8",
     "dotenv": "^16.4.5",
+    "express": "^4.21.1",
     "firebase": "^10.13.1",
     "hls.js": "^1.5.8",
     "lucide-react": "^0.439.0",

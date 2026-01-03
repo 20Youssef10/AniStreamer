@@ -2,7 +2,6 @@
   "name": "AniStream",
   "description": "A comprehensive anime discovery and tracking application integrated with AniList and Firebase.",
   "requestFramePermissions": [
-    "microphone",
-    "camera"
+    "microphone"
   ]
 }

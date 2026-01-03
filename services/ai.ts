@@ -52,6 +52,7 @@ class AIService {
         }));
         contents.push({ role: 'user', parts: [{ text: message }] });
 
+        // Use property .text directly
         const response = await this.client.models.generateContent({
             model: this.defaultModel,
             contents: contents,
@@ -67,6 +68,7 @@ class AIService {
   // 1b. Fast Chat
   async fastChat(message: string) {
       try {
+          // Use property .text directly
           const response = await this.client.models.generateContent({
               model: 'gemini-2.5-flash-lite-latest',
               contents: message
@@ -81,6 +83,7 @@ class AIService {
   // 2. Search Grounding
   async search(query: string) {
     try {
+        // Use property .text directly
         const response = await this.client.models.generateContent({
             model: 'gemini-3-flash-preview',
             contents: query,
@@ -96,7 +99,7 @@ class AIService {
     }
   }
 
-  // SEMANTIC: "Vibe" Search
+  // NEW: Semantic "Vibe" Search
   async vibeSearch(vibe: string): Promise<string[]> {
       try {
           const response = await this.client.models.generateContent({
@@ -118,7 +121,7 @@ class AIService {
       }
   }
 
-  // UTILITY: Generate User Bio
+  // NEW: Generate User Bio
   async generateUserBio(preferences: string[], favorites: string[], tone: string = 'otaku'): Promise<string> {
       try {
           const prompt = `Write a short, engaging bio (max 200 characters) for an anime profile. 
@@ -137,7 +140,7 @@ class AIService {
       }
   }
 
-  // UTILITY: Get Character Quotes
+  // NEW: Get Character Quotes
   async getCharacterQuotes(characterName: string, animeName: string): Promise<string[]> {
       try {
           const prompt = `Find or generate 3-5 famous, inspirational, or iconic quotes spoken by the character "${characterName}" from the anime/manga "${animeName}". 
@@ -163,7 +166,7 @@ class AIService {
       }
   }
 
-  // UTILITY: Character Analysis
+  // NEW: Character Analysis
   async analyzeCharacter(name: string, anime: string, description: string): Promise<string> {
       try {
           const prompt = `Analyze the character "${name}" from "${anime}".
@@ -189,7 +192,7 @@ class AIService {
       }
   }
 
-  // GAME: Isekai Game Engine
+  // NEW: Isekai Game Engine
   async isekaiEngine(world: string, action: string, state: any, language: string = 'en') {
       try {
           const systemPrompt = `You are a Dungeon Master for an Isekai RPG set in the world of "${world}". 
@@ -235,7 +238,7 @@ class AIService {
       }
   }
 
-  // UTILITY: Manga Dubbing (OCR + Speaker ID)
+  // NEW: Manga Dubbing (OCR + Speaker ID)
   async analyzeMangaPage(imageBase64: string): Promise<{text: string, speaker: string, gender: 'Male' | 'Female' | 'Narrator'}[]> {
       try {
           const cleanData = this.cleanBase64(imageBase64);
@@ -347,6 +350,7 @@ class AIService {
   // 5. Image/Video Analysis
   async analyzeMedia(mimeType: string, dataBase64: string, prompt: string) {
       try {
+          // Use property .text directly
           const response = await this.client.models.generateContent({
               model: this.defaultModel,
               contents: {
@@ -366,6 +370,7 @@ class AIService {
   // 6. Thinking Mode
   async complexQuery(query: string) {
       try {
+          // Use property .text directly
           const response = await this.client.models.generateContent({
               model: 'gemini-3-pro-preview',
               contents: query,
@@ -383,6 +388,7 @@ class AIService {
   // 7. Audio Transcription
   async transcribeAudio(audioBase64: string) {
       try {
+          // Use property .text directly
           const response = await this.client.models.generateContent({
               model: 'gemini-3-flash-preview', 
               contents: {

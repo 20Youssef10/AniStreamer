@@ -80,23 +80,6 @@ const MangaDetails: React.FC<MangaDetailsProps> = ({ user }) => {
         const data = await anilistService.getMangaDetails(parseInt(id));
         setManga(data);
 
-        // Add to History
-        try {
-            await db.history.put({
-                id: `MANGA-${data.id}`,
-                mediaId: data.id,
-                type: 'MANGA',
-                title: data.title,
-                coverImage: data.coverImage.large,
-                bannerImage: data.bannerImage,
-                format: data.format,
-                status: data.status,
-                timestamp: Date.now()
-            });
-        } catch (dbErr) {
-            console.warn("Failed to save history", dbErr);
-        }
-
         // Fetch Custom Description
         const customContent = await firebaseService.getCustomDescription('manga', parseInt(id));
         if (customContent) {

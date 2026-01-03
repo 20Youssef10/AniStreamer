@@ -1,706 +1,529 @@
 
-import { initializeApp, FirebaseApp } from 'firebase/app';
-import { 
-  getAuth, GoogleAuthProvider, signInWithPopup, signOut, 
-  signInAnonymously, signInWithEmailAndPassword, createUserWithEmailAndPassword, 
-  Auth, onAuthStateChanged, User 
-} from 'firebase/auth';
-import { 
-  getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, 
-  query, where, orderBy, limit, onSnapshot, setDoc, getDoc, Firestore, 
-  DocumentData, Timestamp 
-} from 'firebase/firestore';
-import { getMessaging, getToken, onMessage, Messaging } from 'firebase/messaging';
-import { configService } from './config';
-import { 
-  UserListEntry, UserProfile, NewsArticle, AppNotification, 
-  Club, ChatMessage, WatchParty, Episode, ManualChapter, 
-  CollectedCharacter, SupportChat, SupportMessage, AIFeatureConfig, 
-  AppBranding, XPRewardsConfig, AILimitsConfig, UserSettings, SavedSearch,
-  MediaType, UserRecommendation, DiscussionPost, CharacterComment, CustomList,
-  PartyEvent
-} from '../types';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, signInAnonymously, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, query, where, limit, getDocs, addDoc, deleteDoc, onSnapshot, orderBy, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { getMessaging, getToken, onMessage } from 'firebase/messaging';
+import { UserProfile, UserListEntry, AppConfig, FeatureLockConfig, AppNotification, SavedSearch, DiscussionPost, Episode, ManualChapter, Club, ChatMessage, WatchParty, CollectedCharacter, NewsArticle, CharacterComment, SupportMessage, SupportChat, AppBranding, XPRewardsConfig, AILimitsConfig, AIFeatureConfig } from '../types';
+import { DEFAULT_CONFIG } from '../constants';
 
 class FirebaseService {
-  private app: FirebaseApp | undefined;
-  private auth: Auth | undefined;
-  private db: Firestore | undefined;
-  private messaging: Messaging | undefined;
-  private initPromise: Promise<void> | null = null;
+  private app: any;
+  private auth: any;
+  private db: any;
+  private messaging: any;
 
   async init() {
-    if (this.initPromise) return this.initPromise;
-    
-    this.initPromise = (async () => {
-      const config = await configService.loadConfig();
-      if (!config.firebase || !config.firebase.apiKey) {
-          console.error("Firebase config missing");
-          return;
-      }
-      
-      this.app = initializeApp(config.firebase);
-      this.auth = getAuth(this.app);
-      this.db = getFirestore(this.app);
-      
-      try {
+    this.app = initializeApp(DEFAULT_CONFIG.firebase);
+    this.auth = getAuth(this.app);
+    this.db = getFirestore(this.app);
+    try {
         this.messaging = getMessaging(this.app);
-      } catch (e) {
-        console.warn("Messaging not supported (likely http localhost)");
-      }
-    })();
-    return this.initPromise;
+    } catch (e) {
+        console.warn("Messaging not supported");
+    }
   }
 
-  getAuthInstance(): Auth {
-      if (!this.auth) throw new Error("Firebase not initialized");
-      return this.auth;
+  getAuthInstance() {
+    return this.auth;
   }
 
-  // --- Auth Methods ---
-
+  // --- Auth ---
   async loginWithGoogle() {
-      const provider = new GoogleAuthProvider();
-      const res = await signInWithPopup(this.auth!, provider);
-      await this.ensureUserProfile(res.user);
-      return res;
+    const provider = new GoogleAuthProvider();
+    await signInWithPopup(this.auth, provider);
+    await this.checkUserExists(this.auth.currentUser);
   }
 
   async loginAnonymously() {
-      return signInAnonymously(this.auth!);
-  }
-
-  async loginWithEmail(email: string, pass: string) {
-      return signInWithEmailAndPassword(this.auth!, email, pass);
+    await signInAnonymously(this.auth);
   }
 
   async registerWithEmail(email: string, pass: string) {
-      const res = await createUserWithEmailAndPassword(this.auth!, email, pass);
-      await this.ensureUserProfile(res.user);
-      return res;
+      const cred = await createUserWithEmailAndPassword(this.auth, email, pass);
+      await this.checkUserExists(cred.user);
+  }
+
+  async loginWithEmail(email: string, pass: string) {
+      await signInWithEmailAndPassword(this.auth, email, pass);
   }
 
   async logout() {
-      return signOut(this.auth!);
+    await signOut(this.auth);
   }
 
-  private async ensureUserProfile(user: User) {
-      if (!this.db) return;
-      const userRef = doc(this.db, "users", user.uid);
-      const snap = await getDoc(userRef);
+  async checkUserExists(user: any) {
+      if (!user) return;
+      const ref = doc(this.db, "users", user.uid);
+      const snap = await getDoc(ref);
       if (!snap.exists()) {
-          const profile: UserProfile = {
+          const newUser: UserProfile = {
               uid: user.uid,
               displayName: user.displayName || 'User',
-              email: user.email || '',
               photoURL: user.photoURL || '',
+              email: user.email || '',
               level: 1,
               xp: 0,
-              isAdmin: false,
-              isPremium: false
+              settings: {} as any
           };
-          await setDoc(userRef, profile);
+          await setDoc(ref, newUser);
       }
   }
 
+  // --- User ---
   async getUserData(uid: string): Promise<UserProfile | null> {
-      if (!this.db) return null;
-      const snap = await getDoc(doc(this.db, "users", uid));
-      return snap.exists() ? (snap.data() as UserProfile) : null;
+    const snap = await getDoc(doc(this.db, "users", uid));
+    return snap.exists() ? (snap.data() as UserProfile) : null;
   }
 
   async getUserByUsername(username: string): Promise<UserProfile | null> {
-      if (!this.db) return null;
-      const q = query(collection(this.db, "users"), where("username", "==", username), limit(1));
-      const snap = await getDocs(q);
-      return !snap.empty ? (snap.docs[0].data() as UserProfile) : null;
-  }
-
-  async getAllUsers(): Promise<UserProfile[]> {
-      if (!this.db) return [];
-      const snap = await getDocs(collection(this.db, "users"));
-      return snap.docs.map(d => d.data() as UserProfile);
-  }
-
-  async updateUserProfile(displayName: string, photoURL: string, bio: string, username: string) {
-      if (!this.auth?.currentUser || !this.db) return;
-      await updateDoc(doc(this.db, "users", this.auth.currentUser.uid), {
-          displayName, photoURL, bio, username
-      });
-  }
-
-  async updateUserSettings(uid: string, settings: UserSettings) {
-      if (!this.db) return;
-      await updateDoc(doc(this.db, "users", uid), { settings });
+    const q = query(collection(this.db, "users"), where("username", "==", username), limit(1));
+    const snap = await getDocs(q);
+    return !snap.empty ? (snap.docs[0].data() as UserProfile) : null;
   }
 
   async checkUsernameAvailability(username: string, currentUid: string): Promise<boolean> {
-      if (!this.db) return false;
       const q = query(collection(this.db, "users"), where("username", "==", username));
       const snap = await getDocs(q);
       if (snap.empty) return true;
       return snap.docs[0].id === currentUid;
   }
 
-  // --- Content & Lists ---
+  async updateUserProfile(displayName: string, photoURL: string, bio: string, username: string) {
+      if (!this.auth.currentUser) return;
+      await updateDoc(doc(this.db, "users", this.auth.currentUser.uid), { displayName, photoURL, bio, username });
+      await updateProfile(this.auth.currentUser, { displayName, photoURL });
+  }
 
+  async getAllUsers(): Promise<UserProfile[]> {
+      const snap = await getDocs(collection(this.db, "users"));
+      return snap.docs.map(d => d.data() as UserProfile);
+  }
+
+  async updateUserSettings(uid: string, settings: any) {
+      await updateDoc(doc(this.db, "users", uid), { settings });
+  }
+
+  // --- List ---
   async getUserAnimeList(uid: string): Promise<UserListEntry[]> {
-      if (!this.db) return [];
-      const snap = await getDocs(collection(this.db, "users", uid, "animelist"));
+      const snap = await getDocs(collection(this.db, "users", uid, "list"));
       return snap.docs.map(d => d.data() as UserListEntry);
   }
 
-  subscribeToUserList(uid: string, cb: (data: UserListEntry[]) => void) {
-      if (!this.db) return () => {};
-      return onSnapshot(collection(this.db, "users", uid, "animelist"), (snap) => {
-          cb(snap.docs.map(d => d.data() as UserListEntry));
+  subscribeToUserList(uid: string, callback: (data: UserListEntry[]) => void) {
+      return onSnapshot(collection(this.db, "users", uid, "list"), (snap) => {
+          callback(snap.docs.map(d => d.data() as UserListEntry));
       });
   }
 
   async updateUserAnimeEntry(uid: string, entry: UserListEntry) {
-      if (!this.db) return;
-      // Use composite key or animeId as string
-      await setDoc(doc(this.db, "users", uid, "animelist", entry.animeId.toString()), entry);
+      await setDoc(doc(this.db, "users", uid, "list", entry.animeId.toString()), entry);
   }
 
   async importUserList(uid: string, entries: UserListEntry[]) {
-      if (!this.db) return;
-      const batchLimit = 500;
-      // In a real app, use writeBatch. For this demo, Promise.all is used for simplicity/speed but batch is safer
-      // Using simple parallel sets for now
-      const promises = entries.map(e => setDoc(doc(this.db!, "users", uid, "animelist", e.animeId.toString()), e));
-      await Promise.all(promises);
-  }
-
-  async toggleFavorite(uid: string, id: number, status: boolean, type: 'ANIME' | 'MANGA' | 'CHARACTER' = 'ANIME') {
-      if (!this.db) return;
-      const userRef = doc(this.db, "users", uid);
-      const userSnap = await getDoc(userRef);
-      if (userSnap.exists()) {
-          const data = userSnap.data();
-          let favorites = data.favorites || [];
-          let favChars = data.favoriteChars || [];
-          
-          if (type === 'CHARACTER') {
-              if (status) {
-                  if (!favChars.includes(id)) favChars.push(id);
-              } else {
-                  favChars = favChars.filter((i: number) => i !== id);
-              }
-              await updateDoc(userRef, { favoriteChars: favChars });
-          } else {
-              if (status) {
-                  if (!favorites.includes(id)) favorites.push(id);
-              } else {
-                  favorites = favorites.filter((i: number) => i !== id);
-              }
-              await updateDoc(userRef, { favorites });
-          }
-      }
-  }
-
-  // --- XP & Economy ---
-
-  async awardXP(uid: string, amount: number, source: string = 'action') {
-      if (!this.db) return { newLevel: null, unlockedBadge: null };
-      const userRef = doc(this.db, "users", uid);
-      const userSnap = await getDoc(userRef);
-      if (!userSnap.exists()) return { newLevel: null, unlockedBadge: null };
-      
-      const userData = userSnap.data() as UserProfile;
-      const newXP = (userData.xp || 0) + amount;
-      const newLevel = Math.floor(Math.sqrt(newXP / 100)) + 1; // Simple quadratic curve
-      
-      const updates: any = { xp: newXP };
-      let levelUp = null;
-      
-      if (newLevel > userData.level) {
-          updates.level = newLevel;
-          levelUp = newLevel;
-      }
-
-      await updateDoc(userRef, updates);
-      return { newLevel: levelUp, unlockedBadge: null };
-  }
-
-  async claimCharacter(uid: string, char: CollectedCharacter) {
-      if (!this.db) return;
-      const userRef = doc(this.db, "users", uid);
-      const userSnap = await getDoc(userRef);
-      if (userSnap.exists()) {
-          const collection = userSnap.data().collection || [];
-          await updateDoc(userRef, { collection: [char, ...collection] });
-      }
-  }
-
-  // --- Notifications ---
-
-  async broadcastNotification(notification: { title: string; body: string; link?: string }) {
-      if (!this.db) return;
-      await addDoc(collection(this.db, "system_broadcasts"), { ...notification, timestamp: Date.now() });
-  }
-
-  async sendUserNotification(uid: string, notification: { title: string; body: string; link?: string }) {
-      if (!this.db) return;
-      await addDoc(collection(this.db, "users", uid, "notifications"), {
-          ...notification,
-          timestamp: Date.now(),
-          read: false
+      const batch = await import('firebase/firestore').then(m => m.writeBatch(this.db));
+      entries.forEach(entry => {
+          const ref = doc(this.db, "users", uid, "list", entry.animeId.toString());
+          batch.set(ref, entry);
       });
+      await batch.commit();
   }
 
-  subscribeToNotifications(uid: string, cb: (data: AppNotification[]) => void) {
-      if (!this.db) return () => {};
-      const q = query(collection(this.db, "users", uid, "notifications"), orderBy("timestamp", "desc"), limit(20));
-      return onSnapshot(q, (snap) => {
-          const notifs = snap.docs.map(d => ({ id: d.id, ...d.data() } as AppNotification));
-          cb(notifs);
-      });
-  }
-
-  async markNotificationRead(uid: string, notifId: string) {
-      if (!this.db) return;
-      await updateDoc(doc(this.db, "users", uid, "notifications", notifId), { read: true });
-  }
-
-  async clearAllNotifications(uid: string) {
-      if (!this.db) return;
-      const q = query(collection(this.db, "users", uid, "notifications"));
-      const snap = await getDocs(q);
-      const batch = snap.docs.map(d => deleteDoc(d.ref));
-      await Promise.all(batch);
-  }
-
-  async requestNotificationPermission(uid: string) {
-      if (!this.messaging || !this.db) return;
-      try {
-          const token = await getToken(this.messaging, { vapidKey: configService.getConfig().firebase.vapidKey });
-          if (token) {
-              await updateDoc(doc(this.db, "users", uid), { fcmToken: token });
-          }
-      } catch (e) {
-          console.warn("Notification permission denied", e);
-      }
-  }
-
-  // --- Community & Social ---
-
-  async getClubs(): Promise<Club[]> {
-      if (!this.db) return [];
-      const snap = await getDocs(collection(this.db, "clubs"));
-      return snap.docs.map(d => ({ id: d.id, ...d.data() } as Club));
-  }
-
-  async createClub(clubData: Partial<Club>) {
-      if (!this.db) return;
-      await addDoc(collection(this.db, "clubs"), { ...clubData, memberCount: 1, members: [clubData.ownerId] });
-  }
-
-  subscribeToClubChat(clubId: string, cb: (msgs: ChatMessage[]) => void) {
-      if (!this.db) return () => {};
-      const q = query(collection(this.db, "clubs", clubId, "messages"), orderBy("timestamp", "asc"), limit(50));
-      return onSnapshot(q, (snap) => cb(snap.docs.map(d => ({ id: d.id, ...d.data() } as ChatMessage))));
-  }
-
-  async sendClubMessage(clubId: string, msg: ChatMessage) {
-      if (!this.db) return;
-      await addDoc(collection(this.db, "clubs", clubId, "messages"), msg);
-  }
-
-  subscribeToGlobalChat(room: string, cb: (msgs: ChatMessage[]) => void) {
-      if (!this.db) return () => {};
-      const q = query(collection(this.db, "global_chat", room, "messages"), orderBy("timestamp", "desc"), limit(50));
-      return onSnapshot(q, (snap) => cb(snap.docs.map(d => ({ id: d.id, ...d.data() } as ChatMessage)).reverse()));
-  }
-
-  async sendGlobalMessage(room: string, msg: ChatMessage) {
-      if (!this.db) return;
-      await addDoc(collection(this.db, "global_chat", room, "messages"), msg);
-  }
-
-  async getLeaderboard(): Promise<UserProfile[]> {
-      if (!this.db) return [];
-      const q = query(collection(this.db, "users"), orderBy("xp", "desc"), limit(50));
-      const snap = await getDocs(q);
-      return snap.docs.map(d => d.data() as UserProfile);
-  }
-
-  async sendFriendRequest(sender: UserProfile, targetUid: string) {
-      if (!this.db) return;
-      await updateDoc(doc(this.db, "users", targetUid), {
-          friendRequests: [{
-              fromId: sender.uid,
-              fromName: sender.displayName,
-              fromAvatar: sender.photoURL,
-              timestamp: Date.now()
-          }]
-      });
-  }
-
-  // --- Watch Party ---
-
-  async createWatchParty(hostId: string, animeId: number, title: string): Promise<string> {
-      if (!this.db) throw new Error("DB not init");
-      const ref = await addDoc(collection(this.db, "watch_parties"), {
-          hostId,
-          animeId,
-          animeTitle: title,
-          currentTime: 0,
-          isPlaying: false,
-          participants: [hostId],
-          status: 'active',
-          createdAt: Date.now()
-      });
-      return ref.id;
-  }
-
-  async joinWatchParty(partyId: string, userId: string) {
-      if (!this.db) return;
-      const ref = doc(this.db, "watch_parties", partyId);
+  // --- XP & Rewards ---
+  async awardXP(uid: string, amount: number, source: string = 'generic') {
+      const ref = doc(this.db, "users", uid);
       const snap = await getDoc(ref);
-      if (snap.exists()) {
-          const data = snap.data();
-          const participants = data.participants || [];
-          if (!participants.includes(userId)) {
-              await updateDoc(ref, { participants: [...participants, userId] });
-          }
-      } else {
-          throw new Error("Party not found");
+      if (!snap.exists()) return { newLevel: 0 };
+      
+      const data = snap.data() as UserProfile;
+      const newXP = data.xp + amount;
+      const newLevel = Math.floor(Math.sqrt(newXP / 100)) + 1;
+      
+      const updates: any = { xp: newXP, level: newLevel };
+      let unlockedBadge = undefined;
+
+      // Badge Logic (Simplified Probabilistic)
+      const badges = data.badges || [];
+      const hasBadge = (name: string) => badges.some(b => b.name === name);
+
+      if (source === 'trivia' && !hasBadge('Brainiac') && Math.random() > 0.7) {
+          unlockedBadge = { name: 'Brainiac', description: 'Master of anime knowledge', icon: '🧠', unlockedAt: Date.now() };
+      } else if (source === 'gacha' && !hasBadge('Whale') && Math.random() > 0.9) {
+          unlockedBadge = { name: 'Whale', description: 'Gacha addict', icon: '🐳', unlockedAt: Date.now() };
+      } else if (source === 'reflex' && !hasBadge('Ninja') && Math.random() > 0.8) {
+          unlockedBadge = { name: 'Ninja', description: 'Lightning fast reflexes', icon: '⚡', unlockedAt: Date.now() };
+      } else if (source === 'memory' && !hasBadge('Eidetic') && Math.random() > 0.8) {
+          unlockedBadge = { name: 'Eidetic', description: 'Perfect memory', icon: '🃏', unlockedAt: Date.now() };
+      } else if (newLevel >= 10 && !hasBadge('Veteran')) {
+          unlockedBadge = { name: 'Veteran', description: 'Reached Level 10', icon: '🎖️', unlockedAt: Date.now() };
       }
+
+      if (unlockedBadge) {
+          updates.badges = arrayUnion(unlockedBadge);
+      }
+      
+      await updateDoc(ref, updates);
+      return { newLevel: newLevel > data.level ? newLevel : 0, unlockedBadge };
   }
 
-  subscribeToWatchParty(partyId: string, cb: (party: WatchParty) => void) {
-      if (!this.db) return () => {};
-      return onSnapshot(doc(this.db, "watch_parties", partyId), (doc) => {
-          if (doc.exists()) cb({ id: doc.id, ...doc.data() } as WatchParty);
-      });
-  }
-
-  async updateWatchPartyState(partyId: string, state: Partial<WatchParty> & { videoUrl?: string }) {
-      if (!this.db) return;
-      await updateDoc(doc(this.db, "watch_parties", partyId), state);
-  }
-
-  subscribeToPartyMessages(partyId: string, cb: (msgs: ChatMessage[]) => void) {
-      if (!this.db) return () => {};
-      const q = query(collection(this.db, "watch_parties", partyId, "messages"), orderBy("timestamp", "asc"));
-      return onSnapshot(q, (snap) => cb(snap.docs.map(d => ({ id: d.id, ...d.data() } as ChatMessage))));
-  }
-
-  async sendPartyMessage(partyId: string, msg: ChatMessage) {
-      if (!this.db) return;
-      await addDoc(collection(this.db, "watch_parties", partyId, "messages"), msg);
-  }
-
-  subscribeToPartyEvents(partyId: string, cb: (events: PartyEvent[]) => void) {
-      if (!this.db) return () => {};
-      const q = query(
-          collection(this.db, "watch_parties", partyId, "events"),
-          orderBy("timestamp", "asc"),
-          where("timestamp", ">", Date.now() - 5000) // Only listen to recent events
-      );
-      return onSnapshot(q, (snap) => {
-          cb(snap.docChanges().filter(change => change.type === 'added').map(change => ({ id: change.doc.id, ...change.doc.data() } as PartyEvent)));
-      });
-  }
-
-  async sendPartyEvent(partyId: string, event: PartyEvent) {
-      if (!this.db) return;
-      await addDoc(collection(this.db, "watch_parties", partyId, "events"), event);
-  }
-
-  // --- System & Config ---
-
+  // --- System ---
   async getSystemConfig() {
-      if (!this.db) return null;
       const snap = await getDoc(doc(this.db, "system", "config"));
       return snap.exists() ? snap.data() : null;
   }
 
   async updateSystemConfig(config: any) {
-      if (!this.db) return;
       await setDoc(doc(this.db, "system", "config"), config, { merge: true });
   }
 
-  async getAdminStats() {
-      if (!this.db) return { totalUsers: 0, totalEpisodes: 0, totalReviews: 0, maintenance: false };
-      // This is expensive in Firestore, usually would use aggregated counters
-      // For this demo, we estimate or use separate counters doc
-      const conf = await this.getSystemConfig();
-      const usersSnap = await getDocs(collection(this.db, "users")); // Beware read costs
-      return {
-          totalUsers: usersSnap.size,
-          totalEpisodes: 0, 
-          totalReviews: 0,
-          maintenance: conf?.maintenanceMode || false
-      };
-  }
-
   async getTranslations() {
-      if (!this.db) return null;
       const snap = await getDoc(doc(this.db, "system", "translations"));
       return snap.exists() ? snap.data() : null;
   }
 
   async saveTranslations(translations: any) {
-      if (!this.db) return;
       await setDoc(doc(this.db, "system", "translations"), translations);
   }
 
-  async getPublishedNews(limitCount: number = 5): Promise<NewsArticle[]> {
-      if (!this.db) return [];
-      // Optimization: Fetch by status only, then sort client-side to avoid composite index requirement
-      const q = query(collection(this.db, "news"), where("status", "==", "PUBLISHED"));
-      const snap = await getDocs(q);
-      const articles = snap.docs.map(d => ({ id: d.id, ...d.data() } as NewsArticle));
-      return articles.sort((a, b) => b.createdAt - a.createdAt).slice(0, limitCount);
-  }
-
-  async getPendingNews(): Promise<NewsArticle[]> {
-      if (!this.db) return [];
-      // Optimization: Fetch by status only, then sort client-side to avoid composite index requirement
-      const q = query(collection(this.db, "news"), where("status", "==", "PENDING"));
-      const snap = await getDocs(q);
-      const articles = snap.docs.map(d => ({ id: d.id, ...d.data() } as NewsArticle));
-      return articles.sort((a, b) => b.createdAt - a.createdAt);
-  }
-
-  async submitNews(article: Omit<NewsArticle, 'id'>) {
-      if (!this.db) return;
-      await addDoc(collection(this.db, "news"), article);
-  }
-
-  async updateNewsStatus(id: string, status: 'PUBLISHED' | 'REJECTED') {
-      if (!this.db) return;
-      await updateDoc(doc(this.db, "news", id), { status });
-  }
-
   async getAIFeatures(): Promise<AIFeatureConfig> {
-      if (!this.db) return {};
       const snap = await getDoc(doc(this.db, "system", "ai_features"));
-      return snap.exists() ? (snap.data() as AIFeatureConfig) : {};
+      return snap.exists() ? snap.data() as AIFeatureConfig : {};
   }
 
-  // --- Content Management (Episodes/Chapters) ---
-
+  // --- Content ---
   async getEpisodes(animeId: number): Promise<Episode[]> {
-      if (!this.db) return [];
-      // Client-side sorting to avoid index requirements
-      const q = query(collection(this.db, "content", animeId.toString(), "episodes"));
-      const snap = await getDocs(q);
-      const episodes = snap.docs.map(d => ({ id: d.id, ...d.data() } as Episode));
-      return episodes.sort((a, b) => a.number - b.number);
+      const snap = await getDocs(collection(this.db, "anime", animeId.toString(), "episodes"));
+      return snap.docs.map(d => ({ ...d.data(), id: d.id } as Episode));
   }
 
-  subscribeToEpisodes(animeId: number, cb: (eps: Episode[]) => void) {
-      if (!this.db) return () => {};
-      // Removed orderBy to prevent missing index errors
-      const q = query(collection(this.db, "content", animeId.toString(), "episodes"));
-      return onSnapshot(q, (snap) => {
-          const episodes = snap.docs.map(d => ({ id: d.id, ...d.data() } as Episode));
-          episodes.sort((a, b) => a.number - b.number);
-          cb(episodes);
+  subscribeToEpisodes(animeId: number, callback: (episodes: Episode[]) => void) {
+      return onSnapshot(collection(this.db, "anime", animeId.toString(), "episodes"), (snap) => {
+          callback(snap.docs.map(d => ({ ...d.data(), id: d.id } as Episode)).sort((a,b) => a.number - b.number));
       });
   }
 
-  async addEpisode(animeId: number, episode: Partial<Episode>) {
-      if (!this.db) return;
-      await addDoc(collection(this.db, "content", animeId.toString(), "episodes"), { ...episode, createdAt: Date.now() });
+  async addEpisode(animeId: number, episode: any) {
+      await addDoc(collection(this.db, "anime", animeId.toString(), "episodes"), { ...episode, createdAt: Date.now() });
   }
 
   async deleteEpisode(animeId: number, episodeId: string) {
-      if (!this.db) return;
-      await deleteDoc(doc(this.db, "content", animeId.toString(), "episodes", episodeId));
+      await deleteDoc(doc(this.db, "anime", animeId.toString(), "episodes", episodeId));
   }
 
-  subscribeToChapters(mangaId: number, cb: (chapters: ManualChapter[]) => void) {
-      if (!this.db) return () => {};
-      // Removed orderBy to prevent missing index errors
-      const q = query(collection(this.db, "content", mangaId.toString(), "chapters"));
-      return onSnapshot(q, (snap) => {
-          const chapters = snap.docs.map(d => ({ id: d.id, ...d.data() } as ManualChapter));
-          chapters.sort((a, b) => b.number - a.number); // Descending for manga
-          cb(chapters);
+  subscribeToChapters(mangaId: number, callback: (chapters: ManualChapter[]) => void) {
+      return onSnapshot(collection(this.db, "manga", mangaId.toString(), "chapters"), (snap) => {
+          callback(snap.docs.map(d => ({ ...d.data(), id: d.id } as ManualChapter)).sort((a,b) => a.number - b.number));
       });
   }
 
-  async addChapter(mangaId: number, chapter: Partial<ManualChapter>) {
-      if (!this.db) return;
-      await addDoc(collection(this.db, "content", mangaId.toString(), "chapters"), { ...chapter, createdAt: Date.now() });
+  async addChapter(mangaId: number, chapter: any) {
+      await addDoc(collection(this.db, "manga", mangaId.toString(), "chapters"), { ...chapter, createdAt: Date.now() });
   }
 
   async deleteChapter(mangaId: number, chapterId: string) {
-      if (!this.db) return;
-      await deleteDoc(doc(this.db, "content", mangaId.toString(), "chapters", chapterId));
+      await deleteDoc(doc(this.db, "manga", mangaId.toString(), "chapters", chapterId));
   }
 
-  async getCustomDescription(type: 'anime' | 'manga' | 'character' | 'studio', id: number) {
-      if (!this.db) return null;
-      const snap = await getDoc(doc(this.db, "custom_descriptions", `${type}_${id}`));
-      return snap.exists() ? snap.data() : null;
+  // --- Social ---
+  async toggleFavorite(uid: string, itemId: number, isFavorite: boolean, type: 'ANIME' | 'MANGA' | 'CHARACTER' = 'ANIME') {
+      const ref = doc(this.db, "users", uid);
+      const field = type === 'CHARACTER' ? 'favoriteChars' : 'favorites';
+      if (isFavorite) {
+          await updateDoc(ref, { [field]: arrayUnion(itemId) });
+      } else {
+          await updateDoc(ref, { [field]: arrayRemove(itemId) });
+      }
   }
 
-  // --- Search & Saved ---
-
-  async getSavedSearches(uid: string): Promise<SavedSearch[]> {
-      if (!this.db) return [];
-      const snap = await getDocs(collection(this.db, "users", uid, "saved_searches"));
-      return snap.docs.map(d => ({ id: d.id, ...d.data() } as SavedSearch));
-  }
-
-  async saveSearchQuery(uid: string, name: string, filters: any) {
-      if (!this.db) return;
-      await addDoc(collection(this.db, "users", uid, "saved_searches"), {
-          name, filters, createdAt: Date.now()
+  subscribeToDiscussions(mediaId: number, callback: (posts: DiscussionPost[]) => void) {
+      const q = query(collection(this.db, "anime", mediaId.toString(), "discussions"), orderBy("createdAt", "desc"));
+      return onSnapshot(q, (snap) => {
+          callback(snap.docs.map(d => ({ ...d.data(), id: d.id } as DiscussionPost)));
       });
-  }
-
-  async deleteSavedSearch(uid: string, id: string) {
-      if (!this.db) return;
-      await deleteDoc(doc(this.db, "users", uid, "saved_searches", id));
-  }
-
-  // --- Discussions & Comments ---
-
-  subscribeToDiscussions(mediaId: number, cb: (posts: DiscussionPost[]) => void) {
-      if (!this.db) return () => {};
-      const q = query(collection(this.db, "discussions", mediaId.toString(), "posts"), orderBy("createdAt", "desc"));
-      return onSnapshot(q, (snap) => cb(snap.docs.map(d => ({ id: d.id, ...d.data() } as DiscussionPost))));
   }
 
   async addDiscussionPost(mediaId: number, post: DiscussionPost) {
-      if (!this.db) return;
-      await addDoc(collection(this.db, "discussions", mediaId.toString(), "posts"), post);
+      await addDoc(collection(this.db, "anime", mediaId.toString(), "discussions"), post);
   }
 
-  async deleteDiscussionPost(mediaId: number | string, postId: string) {
-      if (!this.db) return;
-      await deleteDoc(doc(this.db, "discussions", mediaId.toString(), "posts", postId));
+  async deleteDiscussionPost(mediaId: string | number, postId: string) {
+      await deleteDoc(doc(this.db, "anime", mediaId.toString(), "discussions", postId));
   }
 
   async getFlaggedContent() {
-      if (!this.db) return [];
-      // In a real app, this would query a collection group or specific flagged collection.
-      // For demo, assume "flagged_posts" collection
-      const snap = await getDocs(collection(this.db, "flagged_posts"));
-      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      // In real app, querying across subcollections requires group query or dedicated collection
+      // For simplicity, we assume a root 'flags' collection or we just check specific logic
+      // Here implementing a placeholder for the Admin Dashboard usage
+      return []; 
   }
 
-  async unflagPost(mediaId: number | string, postId: string) {
-      if (!this.db) return;
-      // Logic to unflag
-      await updateDoc(doc(this.db, "discussions", mediaId.toString(), "posts", postId), { isFlagged: false });
-      // Remove from flagged collection
-      const q = query(collection(this.db, "flagged_posts"), where("postId", "==", postId));
-      const snap = await getDocs(q);
-      snap.forEach(d => deleteDoc(d.ref));
+  async unflagPost(mediaId: string | number, postId: string) {
+      await updateDoc(doc(this.db, "anime", mediaId.toString(), "discussions", postId), { isFlagged: false });
   }
 
-  subscribeToCharacterComments(charId: number, cb: (comments: CharacterComment[]) => void) {
-      if (!this.db) return () => {};
-      const q = query(collection(this.db, "character_comments", charId.toString(), "posts"), orderBy("createdAt", "desc"));
-      return onSnapshot(q, (snap) => cb(snap.docs.map(d => ({ id: d.id, ...d.data() } as CharacterComment))));
-  }
-
-  async addCharacterComment(charId: number, comment: CharacterComment) {
-      if (!this.db) return;
-      await addDoc(collection(this.db, "character_comments", charId.toString(), "posts"), comment);
-  }
-
-  // --- Admin User Management ---
-
-  async makeAdmin(uid: string) {
-      if (!this.db) return;
-      await updateDoc(doc(this.db, "users", uid), { isAdmin: true });
-  }
-
-  async removeAdmin(uid: string) {
-      if (!this.db) return;
-      await updateDoc(doc(this.db, "users", uid), { isAdmin: false });
-  }
-
-  async banUser(uid: string, ban: boolean) {
-      if (!this.db) return;
-      await updateDoc(doc(this.db, "users", uid), { isBanned: ban });
-  }
-
-  // --- Support System ---
-
-  subscribeToSupportChat(userId: string, cb: (msgs: SupportMessage[]) => void) {
-      if (!this.db) return () => {};
-      const q = query(collection(this.db, "support_chats", userId, "messages"), orderBy("timestamp", "asc"));
-      return onSnapshot(q, (snap) => cb(snap.docs.map(d => ({ id: d.id, ...d.data() } as SupportMessage))));
-  }
-
-  async sendSupportMessage(userId: string, text: string, isAdmin: boolean) {
-      if (!this.db) return;
-      const chatRef = doc(this.db, "support_chats", userId);
-      await setDoc(chatRef, { 
-          id: userId,
-          lastMessage: text,
-          updatedAt: Date.now(),
-          hasUnreadAdmin: isAdmin,
-          hasUnreadUser: !isAdmin
-      }, { merge: true });
-      
-      await addDoc(collection(this.db, "support_chats", userId, "messages"), {
-          text, isAdmin, timestamp: Date.now()
+  subscribeToCharacterComments(charId: number, callback: (comments: CharacterComment[]) => void) {
+      const q = query(collection(this.db, "characters", charId.toString(), "comments"), orderBy("createdAt", "desc"));
+      return onSnapshot(q, (snap) => {
+          callback(snap.docs.map(d => ({ ...d.data(), id: d.id } as CharacterComment)));
       });
   }
 
-  subscribeToAllSupportChats(cb: (chats: SupportChat[]) => void) {
-      if (!this.db) return () => {};
+  async addCharacterComment(charId: number, comment: CharacterComment) {
+      await addDoc(collection(this.db, "characters", charId.toString(), "comments"), comment);
+  }
+
+  // --- Communities / Clubs ---
+  async getClubs(): Promise<Club[]> {
+      const snap = await getDocs(collection(this.db, "clubs"));
+      return snap.docs.map(d => ({ ...d.data(), id: d.id } as Club));
+  }
+
+  async createClub(club: any) {
+      await addDoc(collection(this.db, "clubs"), { ...club, memberCount: 1, members: [club.ownerId] });
+  }
+
+  subscribeToClubChat(clubId: string, callback: (msgs: ChatMessage[]) => void) {
+      const q = query(collection(this.db, "clubs", clubId, "messages"), orderBy("timestamp", "asc"));
+      return onSnapshot(q, (snap) => {
+          callback(snap.docs.map(d => ({ ...d.data(), id: d.id } as ChatMessage)));
+      });
+  }
+
+  async sendClubMessage(clubId: string, msg: ChatMessage) {
+      await addDoc(collection(this.db, "clubs", clubId, "messages"), msg);
+  }
+
+  // --- Global Chat ---
+  subscribeToGlobalChat(room: string, callback: (msgs: ChatMessage[]) => void) {
+      const q = query(collection(this.db, "chat_rooms", room, "messages"), orderBy("timestamp", "asc"), limit(50));
+      return onSnapshot(q, (snap) => {
+          callback(snap.docs.map(d => ({ ...d.data(), id: d.id } as ChatMessage)));
+      });
+  }
+
+  async sendGlobalMessage(room: string, msg: ChatMessage) {
+      await addDoc(collection(this.db, "chat_rooms", room, "messages"), msg);
+  }
+
+  // --- Watch Party ---
+  async createWatchParty(hostId: string, animeId: number, title: string): Promise<string> {
+      const docRef = await addDoc(collection(this.db, "watch_parties"), {
+          hostId, animeId, animeTitle: title, currentTime: 0, isPlaying: false, participants: [hostId], status: 'active', videoUrl: ''
+      });
+      return docRef.id;
+  }
+
+  async joinWatchParty(partyId: string, userId: string) {
+      await updateDoc(doc(this.db, "watch_parties", partyId), { participants: arrayUnion(userId) });
+  }
+
+  subscribeToWatchParty(partyId: string, callback: (data: WatchParty) => void) {
+      return onSnapshot(doc(this.db, "watch_parties", partyId), (doc) => {
+          if (doc.exists()) callback({ ...doc.data(), id: doc.id } as WatchParty);
+      });
+  }
+
+  async updateWatchPartyState(partyId: string, state: any) {
+      await updateDoc(doc(this.db, "watch_parties", partyId), state);
+  }
+
+  subscribeToPartyMessages(partyId: string, callback: (msgs: ChatMessage[]) => void) {
+      const q = query(collection(this.db, "watch_parties", partyId, "messages"), orderBy("timestamp", "asc"));
+      return onSnapshot(q, (snap) => {
+          callback(snap.docs.map(d => ({ ...d.data(), id: d.id } as ChatMessage)));
+      });
+  }
+
+  async sendPartyMessage(partyId: string, msg: ChatMessage) {
+      await addDoc(collection(this.db, "watch_parties", partyId, "messages"), msg);
+  }
+
+  // --- Notifications ---
+  subscribeToNotifications(uid: string, callback: (notifs: AppNotification[]) => void) {
+      const q = query(collection(this.db, "users", uid, "notifications"), orderBy("timestamp", "desc"), limit(20));
+      return onSnapshot(q, (snap) => {
+          callback(snap.docs.map(d => ({ ...d.data(), id: d.id } as AppNotification)));
+      });
+  }
+
+  async requestNotificationPermission(uid: string) {
+      if (!this.messaging) return;
+      try {
+          const token = await getToken(this.messaging, { vapidKey: DEFAULT_CONFIG.firebase.vapidKey });
+          if (token) {
+              await updateDoc(doc(this.db, "users", uid), { fcmToken: token });
+          }
+      } catch (e) {
+          console.error("Notification permission denied", e);
+      }
+  }
+
+  async markNotificationRead(uid: string, notifId: string) {
+      await updateDoc(doc(this.db, "users", uid, "notifications", notifId), { read: true });
+  }
+
+  async clearAllNotifications(uid: string) {
+      const snap = await getDocs(collection(this.db, "users", uid, "notifications"));
+      const batch = await import('firebase/firestore').then(m => m.writeBatch(this.db));
+      snap.docs.forEach(d => batch.delete(d.ref));
+      await batch.commit();
+  }
+
+  async broadcastNotification(notification: { title: string; body: string; link?: string }) {
+      // In a real app, this should be a cloud function to send to all users
+      // For this client-side demo, we'll assume there's a 'broadcasts' collection that users subscribe to or cloud function logic
+      await addDoc(collection(this.db, "system_broadcasts"), { ...notification, timestamp: Date.now() });
+  }
+
+  // --- Saved Searches ---
+  async saveSearchQuery(uid: string, name: string, filters: any) {
+      await addDoc(collection(this.db, "users", uid, "saved_searches"), { name, filters, createdAt: Date.now() });
+  }
+
+  async getSavedSearches(uid: string): Promise<SavedSearch[]> {
+      const snap = await getDocs(collection(this.db, "users", uid, "saved_searches"));
+      return snap.docs.map(d => ({ ...d.data(), id: d.id } as SavedSearch));
+  }
+
+  async deleteSavedSearch(uid: string, id: string) {
+      await deleteDoc(doc(this.db, "users", uid, "saved_searches", id));
+  }
+
+  // --- Custom Content / Description overrides ---
+  async getCustomDescription(type: string, id: number): Promise<Record<string, string> | null> {
+      const snap = await getDoc(doc(this.db, "content", type, "overrides", id.toString()));
+      return snap.exists() ? snap.data().descriptions : null;
+  }
+
+  // --- Admin Stats ---
+  async getAdminStats() {
+      // Mock stats or dedicated aggregation doc
+      return { totalUsers: 100, totalEpisodes: 500, totalReviews: 50, maintenance: false };
+  }
+
+  // --- Support Chat ---
+  subscribeToSupportChat(uid: string, callback: (msgs: SupportMessage[]) => void) {
+      const q = query(collection(this.db, "support_chats", uid, "messages"), orderBy("timestamp", "asc"));
+      return onSnapshot(q, (snap) => {
+          callback(snap.docs.map(d => ({ ...d.data(), id: d.id } as SupportMessage)));
+      });
+  }
+
+  async sendSupportMessage(uid: string, text: string, isAdmin: boolean) {
+      await addDoc(collection(this.db, "support_chats", uid, "messages"), { text, isAdmin, timestamp: Date.now() });
+      await setDoc(doc(this.db, "support_chats", uid), { 
+          id: uid,
+          lastMessage: text, 
+          updatedAt: Date.now(),
+          hasUnreadAdmin: isAdmin, 
+          hasUnreadUser: !isAdmin 
+      }, { merge: true });
+  }
+
+  subscribeToAllSupportChats(callback: (chats: SupportChat[]) => void) {
       const q = query(collection(this.db, "support_chats"), orderBy("updatedAt", "desc"));
-      return onSnapshot(q, (snap) => cb(snap.docs.map(d => d.data() as SupportChat)));
+      return onSnapshot(q, (snap) => {
+          callback(snap.docs.map(d => ({ ...d.data(), id: d.id } as SupportChat)));
+      });
   }
 
-  async markSupportChatRead(userId: string, isAdmin: boolean) {
-      if (!this.db) return;
-      const update = isAdmin ? { hasUnreadAdmin: false } : { hasUnreadUser: false };
-      await updateDoc(doc(this.db, "support_chats", userId), update);
+  async markSupportChatRead(uid: string, isAdminReading: boolean) {
+      await updateDoc(doc(this.db, "support_chats", uid), {
+          [isAdminReading ? 'hasUnreadUser' : 'hasUnreadAdmin']: false
+      });
   }
 
-  // --- Custom Lists & Recs ---
-
-  subscribeToCustomLists(uid: string, cb: (lists: CustomList[]) => void) {
-      if (!this.db) return () => {};
-      const q = query(collection(this.db, "users", uid, "custom_lists"));
-      return onSnapshot(q, (snap) => cb(snap.docs.map(d => ({ id: d.id, ...d.data() } as CustomList))));
+  // --- Friend System ---
+  async sendFriendRequest(fromUser: UserProfile, toUid: string) {
+      // Add to target user's requests
+      const request = { fromId: fromUser.uid, fromName: fromUser.displayName, fromAvatar: fromUser.photoURL, timestamp: Date.now() };
+      await updateDoc(doc(this.db, "users", toUid), { friendRequests: arrayUnion(request) });
   }
 
-  async createCustomList(uid: string, list: Omit<CustomList, 'id'>) {
-      if (!this.db) return;
+  // --- Custom Lists ---
+  subscribeToCustomLists(uid: string, callback: (lists: any[]) => void) {
+      return onSnapshot(collection(this.db, "users", uid, "custom_lists"), (snap) => {
+          callback(snap.docs.map(d => ({ ...d.data(), id: d.id })));
+      });
+  }
+
+  async createCustomList(uid: string, list: any) {
       await addDoc(collection(this.db, "users", uid, "custom_lists"), list);
   }
 
   async deleteCustomList(uid: string, listId: string) {
-      if (!this.db) return;
       await deleteDoc(doc(this.db, "users", uid, "custom_lists", listId));
   }
 
-  subscribeToRecommendations(uid: string, cb: (recs: UserRecommendation[]) => void) {
-      if (!this.db) return () => {};
-      const q = query(collection(this.db, "users", uid, "recommendations"));
-      return onSnapshot(q, (snap) => cb(snap.docs.map(d => ({ id: d.id, ...d.data() } as UserRecommendation))));
+  // --- Recommendations ---
+  subscribeToRecommendations(uid: string, callback: (recs: any[]) => void) {
+      return onSnapshot(collection(this.db, "users", uid, "recommendations"), (snap) => {
+          callback(snap.docs.map(d => ({ ...d.data(), id: d.id })));
+      });
   }
 
-  async createRecommendation(uid: string, rec: Omit<UserRecommendation, 'id'>) {
-      if (!this.db) return;
+  async createRecommendation(uid: string, rec: any) {
       await addDoc(collection(this.db, "users", uid, "recommendations"), rec);
   }
 
   async deleteRecommendation(uid: string, recId: string) {
-      if (!this.db) return;
       await deleteDoc(doc(this.db, "users", uid, "recommendations", recId));
   }
 
+  // --- News ---
+  async getPublishedNews(limitCount: number = 10): Promise<NewsArticle[]> {
+      const q = query(collection(this.db, "news"), where("status", "==", "PUBLISHED"), orderBy("createdAt", "desc"), limit(limitCount));
+      const snap = await getDocs(q);
+      return snap.docs.map(d => ({ ...d.data(), id: d.id } as NewsArticle));
+  }
+
+  async getPendingNews(): Promise<NewsArticle[]> {
+      const q = query(collection(this.db, "news"), where("status", "==", "PENDING"), orderBy("createdAt", "desc"));
+      const snap = await getDocs(q);
+      return snap.docs.map(d => ({ ...d.data(), id: d.id } as NewsArticle));
+  }
+
+  async submitNews(article: any) {
+      await addDoc(collection(this.db, "news"), article);
+  }
+
+  async updateNewsStatus(id: string, status: string) {
+      await updateDoc(doc(this.db, "news", id), { status });
+  }
+
+  // --- Admin Actions ---
+  async makeAdmin(uid: string) {
+      await updateDoc(doc(this.db, "users", uid), { isAdmin: true });
+  }
+
+  async removeAdmin(uid: string) {
+      await updateDoc(doc(this.db, "users", uid), { isAdmin: false });
+  }
+
+  async banUser(uid: string, ban: boolean) {
+      await updateDoc(doc(this.db, "users", uid), { isBanned: ban });
+  }
+
+  // --- Collections ---
+  async claimCharacter(uid: string, char: CollectedCharacter) {
+      await updateDoc(doc(this.db, "users", uid), { 
+          collection: arrayUnion(char),
+          lastDailySummon: Date.now() 
+      });
+  }
+
+  async getLeaderboard(): Promise<UserProfile[]> {
+      const q = query(collection(this.db, "users"), orderBy("xp", "desc"), limit(50));
+      const snap = await getDocs(q);
+      return snap.docs.map(d => d.data() as UserProfile);
+  }
+
+  // --- Integrations ---
   async connectAniList(uid: string, token: string) {
-      if (!this.db) return;
-      await updateDoc(doc(this.db, "users", uid), { anilistToken: token });
+      await updateDoc(doc(this.db, "users", uid), { "integrations.anilistToken": token });
   }
 
   async connectMAL(uid: string, tokenData: any) {
-      if (!this.db) return;
-      await updateDoc(doc(this.db, "users", uid), { malToken: tokenData });
+      await updateDoc(doc(this.db, "users", uid), { "integrations.malToken": tokenData });
   }
 }
 

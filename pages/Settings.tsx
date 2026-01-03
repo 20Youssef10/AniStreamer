@@ -8,7 +8,7 @@ import {
   Download, Upload, Palette, Lock, Shield, LayoutDashboard, Database, Globe, 
   Accessibility, Moon, Sun, AlertTriangle, Check, Link as LinkIcon, Monitor, 
   Bell, BookOpen, FileCode, Touchpad, Plus, MousePointer, Image as ImageIcon, 
-  Wifi, Eye, EyeOff, Trash2, Smartphone, Maximize, Type, Volume2, Mic, Youtube
+  Wifi, Eye, EyeOff, Trash2, Smartphone, Maximize, Type, Volume2, Mic
 } from 'lucide-react';
 import { UserListEntry } from '../types';
 import { malService } from '../services/mal';
@@ -24,9 +24,6 @@ const Settings: React.FC = () => {
   // PIN State
   const [pinInput, setPinInput] = useState('');
   const [showPin, setShowPin] = useState(false);
-
-  // YouTube Key State (Local for input)
-  const [ytKeyInput, setYtKeyInput] = useState(settings.youtubeApiKey || '');
 
   const auth = firebaseService.getAuthInstance();
   const user = auth.currentUser;
@@ -142,11 +139,6 @@ const Settings: React.FC = () => {
           updated = [...current, action];
       }
       updateSettings({ quickActions: updated });
-  };
-
-  const saveYoutubeKey = () => {
-      updateSettings({ youtubeApiKey: ytKeyInput });
-      showToast("YouTube API Key Saved!", "success");
   };
 
   const extractThemeFromImage = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -426,43 +418,15 @@ const Settings: React.FC = () => {
               {activeTab === 'integrations' && (
                   <div className="space-y-8 animate-fadeIn">
                       <h2 className="text-2xl font-bold mb-6">Integrations</h2>
-                      
                       <div className="bg-dark-900 p-6 rounded-xl border border-white/5 flex flex-col items-center text-center">
                           <div className="w-16 h-16 bg-[#02A9FF]/10 rounded-full flex items-center justify-center mb-4 text-[#02A9FF] border border-[#02A9FF]/20"><LinkIcon className="w-8 h-8" /></div>
                           <h3 className="text-xl font-bold mb-2">Connect AniList</h3>
                           <button onClick={connectAniList} className="bg-[#02A9FF] text-white px-8 py-3 rounded-xl font-bold hover:bg-[#0290d8] transition-colors shadow-lg">Connect AniList</button>
                       </div>
-                      
                       <div className="bg-dark-900 p-6 rounded-xl border border-white/5 flex flex-col items-center text-center">
                           <div className="w-16 h-16 bg-[#2E51A2]/10 rounded-full flex items-center justify-center mb-4 text-[#2E51A2] border border-[#2E51A2]/20"><LinkIcon className="w-8 h-8" /></div>
                           <h3 className="text-xl font-bold mb-2">Connect MyAnimeList</h3>
                           <button onClick={connectMAL} className="bg-[#2E51A2] text-white px-8 py-3 rounded-xl font-bold hover:bg-[#1e3a7a] transition-colors shadow-lg">Connect MyAnimeList</button>
-                      </div>
-
-                      {/* YouTube API Config */}
-                      <div className="bg-dark-900 p-6 rounded-xl border border-white/5">
-                          <div className="flex items-center gap-3 mb-4">
-                              <div className="p-2 bg-red-600 rounded-lg text-white"><Youtube className="w-6 h-6" /></div>
-                              <div>
-                                  <h3 className="font-bold">YouTube API</h3>
-                                  <p className="text-xs text-slate-400">Provide your own API Key to restore video search.</p>
-                              </div>
-                          </div>
-                          <div className="flex gap-2">
-                              <input 
-                                value={ytKeyInput} 
-                                onChange={(e) => setYtKeyInput(e.target.value)}
-                                placeholder="Paste your API Key here..."
-                                className="flex-1 bg-dark-800 border border-white/10 rounded-lg px-4 py-2 focus:border-red-500 outline-none text-sm"
-                                type="password"
-                              />
-                              <button onClick={saveYoutubeKey} className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white font-bold text-sm transition-colors">
-                                  Save
-                              </button>
-                          </div>
-                          <p className="text-[10px] text-slate-500 mt-2">
-                              This key is stored locally in your browser settings.
-                          </p>
                       </div>
                   </div>
               )}
