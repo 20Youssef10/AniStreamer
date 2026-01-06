@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { configService } from './services/config';
 import { firebaseService } from './services/firebase';
 import { aiService } from './services/ai'; // Import aiService
@@ -124,7 +124,7 @@ const App: React.FC = () => {
     <BrandingProvider>
       <ToastProvider>
         <PlayerProvider>
-          <HashRouter>
+          <BrowserRouter>
             <ScrollToTop />
             <Layout user={user}>
               <GlobalPlayer />
@@ -176,7 +176,7 @@ const App: React.FC = () => {
                 <Route path="/profile/:id" element={<Profile user={user} />} />
               </Routes>
             </Layout>
-          </HashRouter>
+          </BrowserRouter>
         </PlayerProvider>
       </ToastProvider>
     </BrandingProvider>

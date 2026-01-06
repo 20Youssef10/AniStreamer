@@ -36,7 +36,8 @@ const AnimeCard: React.FC<AnimeCardProps> = ({ anime }) => {
       const user = auth.currentUser;
       
       if (action === 'share') {
-          const url = `${window.location.origin}/#/${anime.type === 'MANGA' ? 'manga' : 'anime'}/${anime.id}`;
+          // Updated URL to remove hash for BrowserRouter
+          const url = `${window.location.origin}/${anime.type === 'MANGA' ? 'manga' : 'anime'}/${anime.id}`;
           navigator.clipboard.writeText(url);
           showToast("Link copied to clipboard!", "success");
           setShowMenu(false);

@@ -95,7 +95,7 @@ async function generateSitemap() {
   // Add Static Routes
   staticRoutes.forEach(route => {
     sitemap += `  <url>
-    <loc>${BASE_URL}/#${route}</loc>
+    <loc>${BASE_URL}${route}</loc>
     <changefreq>daily</changefreq>
     <priority>0.8</priority>
   </url>
@@ -105,7 +105,7 @@ async function generateSitemap() {
   // Add Dynamic Anime Routes
   animeIds.forEach(id => {
     sitemap += `  <url>
-    <loc>${BASE_URL}/#/anime/${id}</loc>
+    <loc>${BASE_URL}/anime/${id}</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>
@@ -115,7 +115,7 @@ async function generateSitemap() {
   // Add Dynamic Manga Routes
   trendingMangaIds.forEach(id => {
     sitemap += `  <url>
-    <loc>${BASE_URL}/#/manga/${id}</loc>
+    <loc>${BASE_URL}/manga/${id}</loc>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
   </url>

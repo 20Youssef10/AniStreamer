@@ -47,21 +47,21 @@
       "name": "Search Anime",
       "short_name": "Search",
       "description": "Find your next watch",
-      "url": "/#/search",
+      "url": "/search",
       "icons": [{ "src": "logo.png", "sizes": "192x192" }]
     },
     {
       "name": "Airing Schedule",
       "short_name": "Calendar",
       "description": "See what's airing today",
-      "url": "/#/calendar",
+      "url": "/calendar",
       "icons": [{ "src": "logo.png", "sizes": "192x192" }]
     },
     {
       "name": "AI Assistant",
       "short_name": "AI Chat",
       "description": "Chat with anime characters",
-      "url": "/#/ai",
+      "url": "/ai",
       "icons": [{ "src": "logo.png", "sizes": "192x192" }]
     }
   ]
