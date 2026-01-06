@@ -10,11 +10,12 @@ import {
   AlertTriangle, Eye, EyeOff, Search, Plus, CheckCircle, XCircle, BrainCircuit, 
   ExternalLink, SortAsc, SortDesc, Radio, Newspaper, Edit, Palette, Globe, 
   Coins, TrendingUp, MessageSquare, Send, Crown, Shield, RefreshCw, Layers, 
-  History, Info, Download, Upload, List
+  History, Info, Download, Upload, List, UserCheck, UserX, MessageCircle
 } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { useBranding } from '../context/BrandingContext';
+import LazyImage from '../components/LazyImage';
 
 const AdminDashboard: React.FC = () => {
     const navigate = useNavigate();
@@ -133,11 +134,12 @@ const AdminDashboard: React.FC = () => {
         }
         if (activeTab === 'localization') {
             firebaseService.getTranslations().then((data) => {
-                // Merge remote data with local defaults for editing
                 const merged = { ...translations };
-                for (const lang in data) {
-                    if (!merged[lang as Language]) merged[lang as Language] = {} as any;
-                    Object.assign(merged[lang as Language], data[lang]);
+                if (data) {
+                    for (const lang in data) {
+                        if (!merged[lang as Language]) merged[lang as Language] = {} as any;
+                        Object.assign(merged[lang as Language], data[lang]);
+                    }
                 }
                 setLocales(merged);
             });
@@ -172,9 +174,8 @@ const AdminDashboard: React.FC = () => {
         } catch (e) { console.error(e); } finally { setLoading(false); }
     };
 
-    // --- RBAC Helper ---
     const checkPermission = (perm: AdminPermission) => {
-        return currentUserRole.isMaster || currentUserRole.permissions.includes(perm);
+        return currentUserRole.isMaster || (currentUserRole.permissions && currentUserRole.permissions.includes(perm));
     };
 
     const handleSaveSystemConfig = async () => {
@@ -192,7 +193,7 @@ const AdminDashboard: React.FC = () => {
         } catch (e) { showToast("Failed to save", "error"); }
     };
 
-    // ... (Content Management Logic: searchContent, selectContent, loadContent, handleAddEpisode, handleBulkImport, handleAddChapter, handleDeleteContent - keep same)
+    // Content Management
     const searchContent = async (e: React.FormEvent) => {
         e.preventDefault();
         if(!searchContentQuery) return;
@@ -242,7 +243,6 @@ const AdminDashboard: React.FC = () => {
             });
             showToast(`Episode ${epForm.number} added`, "success");
             
-            // Notify users
             await firebaseService.broadcastNotification({
                 title: `New Episode: ${selectedMediaTitle}`,
                 body: `Episode ${epForm.number} is now available!`,
@@ -269,7 +269,6 @@ const AdminDashboard: React.FC = () => {
             }
             showToast(`Successfully imported ${bulkForm.end - bulkForm.start + 1} episodes`, "success");
             
-            // Notify users
             await firebaseService.broadcastNotification({
                 title: `New Episodes: ${selectedMediaTitle}`,
                 body: `Episodes ${bulkForm.start}-${bulkForm.end} are now available!`,
@@ -295,7 +294,6 @@ const AdminDashboard: React.FC = () => {
             });
             showToast(`Chapter ${chForm.number} added`, "success");
 
-            // Notify users
             await firebaseService.broadcastNotification({
                 title: `New Chapter: ${selectedMediaTitle}`,
                 body: `Chapter ${chForm.number} is now available!`,
@@ -316,30 +314,25 @@ const AdminDashboard: React.FC = () => {
         } catch (e) { showToast("Delete failed", "error"); }
     };
 
-    // --- Admin Action Handlers (Make Admin, Ban, Support Reply, Broadcast, News, Moderation) - keep same ---
     const handleMakeAdmin = async (userId: string, currentStatus: boolean) => {
-        if (!currentUserRole.isMaster && !checkPermission('MANAGE_ROLES')) return showToast("Master Admin Required", "error");
+        if (!currentUserRole.isMaster && !checkPermission('MANAGE_ROLES')) return showToast("Permission Denied", "error");
         try {
             if (currentStatus) await firebaseService.removeAdmin(userId);
             else await firebaseService.makeAdmin(userId);
             showToast(`Permissions updated for ${userId}`, "success");
             const fetchedUsers = await firebaseService.getAllUsers();
             setUsers(fetchedUsers);
-        } catch (e) {
-            showToast("Update failed", "error");
-        }
+        } catch (e) { showToast("Update failed", "error"); }
     };
 
-    const handleBanUser = async (userId: string, currentStatus: boolean) => {
+    const handleBanUser = async (userId: string, isBanned: boolean) => {
         if (!checkPermission('MODERATE_COMMUNITY')) return showToast("Permission Denied", "error");
         try {
-            await firebaseService.banUser(userId, !currentStatus);
-            showToast(`Compliance status updated for ${userId}`, "success");
+            await firebaseService.banUser(userId, !isBanned);
+            showToast(`User status updated`, "success");
             const fetchedUsers = await firebaseService.getAllUsers();
             setUsers(fetchedUsers);
-        } catch (e) {
-            showToast("Update failed", "error");
-        }
+        } catch (e) { showToast("Update failed", "error"); }
     };
 
     const handleSendSupportReply = async (e: React.FormEvent) => {
@@ -350,9 +343,7 @@ const AdminDashboard: React.FC = () => {
             await firebaseService.sendSupportMessage(activeChatId, replyText, true);
             setReplyText('');
             showToast("Response sent", "success");
-        } catch (e) {
-            showToast("Failed to send reply", "error");
-        }
+        } catch (e) { showToast("Failed to send reply", "error"); }
     };
 
     const sendBroadcast = async () => {
@@ -360,7 +351,6 @@ const AdminDashboard: React.FC = () => {
         if (!broadcastForm.title || !broadcastForm.body) return;
         setSendingBroadcast(true);
         try {
-            // Re-using the new helper function
             await firebaseService.broadcastNotification({
                 title: broadcastForm.title,
                 body: broadcastForm.body,
@@ -368,11 +358,7 @@ const AdminDashboard: React.FC = () => {
             });
             showToast(`Broadcast delivered`, "success");
             setBroadcastForm({ title: '', body: '', link: '' });
-        } catch (e) {
-            showToast("Broadcast delivery failed", "error");
-        } finally {
-            setSendingBroadcast(false);
-        }
+        } catch (e) { showToast("Broadcast delivery failed", "error"); } finally { setSendingBroadcast(false); }
     };
 
     const handleNewsAction = async (articleId: string, status: 'PUBLISHED' | 'REJECTED') => {
@@ -382,9 +368,7 @@ const AdminDashboard: React.FC = () => {
             showToast(`Article status set to ${status}`, "success");
             const pending = await firebaseService.getPendingNews();
             setPendingNews(pending);
-        } catch (e) {
-            showToast("Action failed", "error");
-        }
+        } catch (e) { showToast("Action failed", "error"); }
     };
 
     const handleModeration = async (postId: string, action: 'delete' | 'ignore', animeId: number | string) => {
@@ -399,19 +383,13 @@ const AdminDashboard: React.FC = () => {
             }
             const flagged = await firebaseService.getFlaggedContent();
             setFlaggedPosts(flagged);
-        } catch (e) {
-            showToast("Moderation protocol failed", "error");
-        }
+        } catch (e) { showToast("Moderation protocol failed", "error"); }
     };
 
-    // --- Localization Handlers ---
     const handleUpdateTranslation = (key: string, value: string) => {
         setLocales((prev: any) => ({
             ...prev,
-            [selectedLang]: {
-                ...prev[selectedLang],
-                [key]: value
-            }
+            [selectedLang]: { ...prev[selectedLang], [key]: value }
         }));
     };
 
@@ -419,27 +397,27 @@ const AdminDashboard: React.FC = () => {
         if (!checkPermission('MANAGE_SYSTEM')) return showToast("Permission Denied", "error");
         try {
             await firebaseService.saveTranslations(locales);
-            setTranslations(locales); // Update local cache immediately
+            setTranslations(locales);
             showToast("Translations saved successfully", "success");
-        } catch (e) {
-            showToast("Failed to save translations", "error");
-        }
+        } catch (e) { showToast("Failed to save translations", "error"); }
     };
 
     const addNewKey = () => {
         if (!newKey.trim()) return;
         setLocales((prev: any) => ({
             ...prev,
-            [selectedLang]: {
-                ...prev[selectedLang],
-                [newKey.trim()]: newValue || newKey
-            }
+            [selectedLang]: { ...prev[selectedLang], [newKey.trim()]: newValue || newKey }
         }));
         setNewKey('');
         setNewValue('');
     };
 
-    // Define accessible tabs based on permissions
+    const filteredUsers = users.filter(u => 
+        u.username?.toLowerCase().includes(userSearch.toLowerCase()) || 
+        u.displayName?.toLowerCase().includes(userSearch.toLowerCase()) ||
+        u.email?.toLowerCase().includes(userSearch.toLowerCase())
+    );
+
     const TABS = [
         { id: 'overview', icon: Activity, label: 'Analytics', perm: 'VIEW_ANALYTICS' },
         { id: 'users', icon: Users, label: 'Users', perm: 'MODERATE_COMMUNITY' }, 
@@ -476,7 +454,6 @@ const AdminDashboard: React.FC = () => {
                 </div>
             </div>
 
-            {/* Main Navigation */}
             <div className="flex gap-2 overflow-x-auto pb-4 no-scrollbar border-b border-white/5">
                 {accessibleTabs.map(tab => (
                     <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold whitespace-nowrap transition-all ${activeTab === tab.id ? 'bg-white text-black shadow-lg scale-105' : 'bg-dark-800 text-slate-400 hover:text-white hover:bg-dark-700'}`}>
@@ -486,90 +463,314 @@ const AdminDashboard: React.FC = () => {
                 ))}
             </div>
 
-            {/* TAB CONTENT: LOCALIZATION */}
-            {activeTab === 'localization' && (checkPermission('MANAGE_SYSTEM') || currentUserRole.isMaster) && (
+            {/* USERS TAB */}
+            {activeTab === 'users' && (checkPermission('MANAGE_USERS') || checkPermission('MODERATE_COMMUNITY') || currentUserRole.isMaster) && (
                 <div className="bg-dark-800 p-8 rounded-3xl border border-white/5 shadow-2xl animate-fadeIn">
                     <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-2xl font-bold flex items-center gap-3"><Globe className="w-6 h-6 text-blue-400" /> Language Matrix</h3>
-                        <div className="flex items-center gap-2">
-                            <select 
-                                value={selectedLang} 
-                                onChange={(e) => setSelectedLang(e.target.value as any)}
-                                className="bg-dark-900 border border-white/10 rounded-lg p-2 text-sm focus:border-primary outline-none"
-                            >
-                                {Object.keys(translations).map(lang => (
-                                    <option key={lang} value={lang}>{lang.toUpperCase()}</option>
-                                ))}
-                            </select>
-                            <button onClick={saveLocalization} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold text-sm shadow-lg flex items-center gap-2">
-                                <Save className="w-4 h-4"/> Save All
-                            </button>
+                        <h3 className="text-2xl font-bold flex items-center gap-3"><Users className="w-6 h-6 text-blue-400" /> User Database</h3>
+                        <div className="relative">
+                            <input 
+                                value={userSearch} 
+                                onChange={e => setUserSearch(e.target.value)} 
+                                placeholder="Search by name, email..." 
+                                className="bg-dark-900 border border-white/10 rounded-lg p-3 pl-10 w-64 focus:border-blue-500 outline-none"
+                            />
+                            <Search className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
                         </div>
                     </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left">
+                            <thead>
+                                <tr className="text-slate-500 text-xs uppercase border-b border-white/5">
+                                    <th className="p-4">User</th>
+                                    <th className="p-4">Role</th>
+                                    <th className="p-4">Status</th>
+                                    <th className="p-4">Stats</th>
+                                    <th className="p-4 text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5">
+                                {filteredUsers.map(u => (
+                                    <tr key={u.uid} className="hover:bg-white/5 transition-colors">
+                                        <td className="p-4 flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-full bg-dark-700 overflow-hidden">
+                                                {u.photoURL ? <img src={u.photoURL} alt="" className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full font-bold">{u.displayName[0]}</div>}
+                                            </div>
+                                            <div>
+                                                <div className="font-bold">{u.displayName}</div>
+                                                <div className="text-xs text-slate-500">{u.email}</div>
+                                            </div>
+                                        </td>
+                                        <td className="p-4">
+                                            {u.isAdmin ? <span className="bg-yellow-500/20 text-yellow-400 px-2 py-1 rounded text-xs font-bold border border-yellow-500/30">ADMIN</span> : <span className="text-slate-400 text-sm">User</span>}
+                                        </td>
+                                        <td className="p-4">
+                                            {u.isBanned ? <span className="text-red-500 text-xs font-bold">BANNED</span> : <span className="text-green-400 text-xs">Active</span>}
+                                        </td>
+                                        <td className="p-4">
+                                            <div className="text-xs text-slate-400">Lvl {u.level} • {u.xp} XP</div>
+                                        </td>
+                                        <td className="p-4 text-right flex justify-end gap-2">
+                                            {(currentUserRole.isMaster || checkPermission('MANAGE_ROLES')) && (
+                                                <button onClick={() => handleMakeAdmin(u.uid, !!u.isAdmin)} className="p-2 bg-dark-900 rounded hover:bg-white/10" title="Toggle Admin">
+                                                    {u.isAdmin ? <Shield className="w-4 h-4 text-yellow-400" /> : <Shield className="w-4 h-4 text-slate-600" />}
+                                                </button>
+                                            )}
+                                            {checkPermission('MODERATE_COMMUNITY') && (
+                                                <button onClick={() => handleBanUser(u.uid, !!u.isBanned)} className="p-2 bg-dark-900 rounded hover:bg-red-500/20" title="Ban/Unban">
+                                                    {u.isBanned ? <UserCheck className="w-4 h-4 text-green-400" /> : <Ban className="w-4 h-4 text-red-400" />}
+                                                </button>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                        <div className="bg-dark-900 p-4 rounded-xl border border-white/5">
-                            <h4 className="font-bold mb-4 text-slate-400 uppercase text-xs">Add New Key</h4>
-                            <div className="flex gap-2">
-                                <input placeholder="Key (e.g. 'about')" value={newKey} onChange={e => setNewKey(e.target.value)} className="flex-1 bg-dark-800 border border-white/10 rounded-lg p-2 text-sm"/>
-                                <input placeholder="Value" value={newValue} onChange={e => setNewValue(e.target.value)} className="flex-1 bg-dark-800 border border-white/10 rounded-lg p-2 text-sm"/>
-                                <button onClick={addNewKey} disabled={!newKey} className="bg-primary px-4 rounded-lg text-white font-bold"><Plus className="w-4 h-4"/></button>
+            {/* SUPPORT TAB */}
+            {activeTab === 'support' && (checkPermission('HANDLE_SUPPORT') || currentUserRole.isMaster) && (
+                <div className="grid md:grid-cols-3 gap-6 h-[600px] animate-fadeIn">
+                    <div className="bg-dark-800 rounded-3xl border border-white/5 overflow-hidden flex flex-col">
+                        <div className="p-6 border-b border-white/5 font-bold text-lg flex items-center gap-2">
+                            <MessageCircle className="w-5 h-5 text-green-400" /> Inquiries
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+                            {supportChats.map(chat => (
+                                <button 
+                                    key={chat.id} 
+                                    onClick={() => setActiveChatId(chat.id)}
+                                    className={`w-full text-left p-4 rounded-xl transition-all ${activeChatId === chat.id ? 'bg-primary text-white' : 'hover:bg-white/5 text-slate-300'}`}
+                                >
+                                    <div className="flex justify-between items-center mb-1">
+                                        <span className="font-bold text-sm truncate w-24">{chat.id.slice(0, 8)}...</span>
+                                        {chat.hasUnreadAdmin && <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}
+                                    </div>
+                                    <div className="text-xs opacity-70 truncate">{chat.lastMessage}</div>
+                                    <div className="text-[10px] opacity-50 mt-1">{new Date(chat.updatedAt).toLocaleDateString()}</div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="md:col-span-2 bg-dark-800 rounded-3xl border border-white/5 flex flex-col overflow-hidden">
+                        {activeChatId ? (
+                            <>
+                                <div className="p-6 border-b border-white/5 font-bold bg-dark-900/50">
+                                    Chat with {activeChatId}
+                                </div>
+                                <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
+                                    {chatMessages.map(msg => (
+                                        <div key={msg.id} className={`flex ${msg.isAdmin ? 'justify-end' : 'justify-start'}`}>
+                                            <div className={`max-w-[70%] p-3 rounded-xl text-sm ${msg.isAdmin ? 'bg-primary text-white rounded-tr-none' : 'bg-dark-900 border border-white/10 rounded-tl-none'}`}>
+                                                {msg.text}
+                                                <div className="text-[10px] opacity-50 mt-1 text-right">{new Date(msg.timestamp).toLocaleTimeString()}</div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <form onSubmit={handleSendSupportReply} className="p-4 border-t border-white/5 flex gap-2 bg-dark-900/50">
+                                    <input value={replyText} onChange={e => setReplyText(e.target.value)} className="flex-1 bg-dark-800 border border-white/10 rounded-lg p-3 text-sm focus:border-primary outline-none" placeholder="Type reply..." />
+                                    <button type="submit" className="p-3 bg-primary rounded-lg text-white hover:bg-blue-600"><Send className="w-4 h-4" /></button>
+                                </form>
+                            </>
+                        ) : (
+                            <div className="flex items-center justify-center h-full text-slate-500">Select a chat to view</div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* SYSTEM CONFIG TAB */}
+            {activeTab === 'sys_config' && (checkPermission('MANAGE_SYSTEM') || currentUserRole.isMaster) && (
+                <div className="bg-dark-800 p-8 rounded-3xl border border-white/5 shadow-2xl animate-fadeIn space-y-8">
+                    <h3 className="text-2xl font-bold flex items-center gap-3 mb-6"><Settings className="w-6 h-6 text-slate-400"/> Core Configuration</h3>
+                    
+                    <div className="grid md:grid-cols-2 gap-8">
+                        <div className="space-y-6">
+                            <div className="bg-dark-900 p-6 rounded-2xl border border-white/5">
+                                <h4 className="font-bold mb-4 text-red-400 uppercase text-xs tracking-widest">Emergency Controls</h4>
+                                <label className="flex items-center justify-between cursor-pointer mb-4">
+                                    <span className="font-bold">Maintenance Mode</span>
+                                    <div className="relative inline-block w-12 h-6 align-middle select-none transition duration-200 ease-in">
+                                        <input type="checkbox" checked={sysConfig.maintenanceMode} onChange={e => setSysConfig({...sysConfig, maintenanceMode: e.target.checked})} className="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"/>
+                                        <label className={`toggle-label block overflow-hidden h-6 rounded-full cursor-pointer ${sysConfig.maintenanceMode ? 'bg-red-500' : 'bg-gray-700'}`}></label>
+                                    </div>
+                                </label>
+                                <label className="flex items-center justify-between cursor-pointer">
+                                    <span className="font-bold">Allow Registrations</span>
+                                    <input type="checkbox" checked={sysConfig.allowRegistrations} onChange={e => setSysConfig({...sysConfig, allowRegistrations: e.target.checked})} className="w-5 h-5 accent-green-500"/>
+                                </label>
+                            </div>
+
+                            <div className="bg-dark-900 p-6 rounded-2xl border border-white/5">
+                                <h4 className="font-bold mb-4 text-purple-400 uppercase text-xs tracking-widest">AI Matrix</h4>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 mb-2">Gemini API Key</label>
+                                        <input type="password" value={sysConfig.geminiApiKey} onChange={e => setSysConfig({...sysConfig, geminiApiKey: e.target.value})} className="w-full bg-dark-800 border border-white/10 rounded-lg p-3 text-sm font-mono text-green-400"/>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 mb-2">Default Model</label>
+                                        <select value={sysConfig.defaultModel} onChange={e => setSysConfig({...sysConfig, defaultModel: e.target.value})} className="w-full bg-dark-800 border border-white/10 rounded-lg p-3 text-sm">
+                                            <option value="gemini-3-flash-preview">Flash (Fast)</option>
+                                            <option value="gemini-3-pro-preview">Pro (Reasoning)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-6">
+                            <div className="bg-dark-900 p-6 rounded-2xl border border-white/5">
+                                <h4 className="font-bold mb-4 text-blue-400 uppercase text-xs tracking-widest">Global Announcements</h4>
+                                <textarea 
+                                    value={sysConfig.globalAnnouncement} 
+                                    onChange={e => setSysConfig({...sysConfig, globalAnnouncement: e.target.value})}
+                                    className="w-full bg-dark-800 border border-white/10 rounded-xl p-4 h-32 text-sm focus:border-blue-500 outline-none resize-none"
+                                    placeholder="Message displayed on all user dashboards..."
+                                />
                             </div>
                         </div>
                     </div>
+                </div>
+            )}
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {Object.keys(locales[selectedLang] || {}).map((key) => (
-                            <div key={key} className="bg-dark-900 p-4 rounded-xl border border-white/5 group hover:border-primary/50 transition-colors">
-                                <div className="text-xs font-bold text-slate-500 mb-1 uppercase tracking-wider">{key}</div>
-                                <input 
-                                    value={locales[selectedLang][key]} 
-                                    onChange={(e) => handleUpdateTranslation(key, e.target.value)}
-                                    className="w-full bg-transparent border-b border-white/10 focus:border-primary outline-none py-1 font-medium text-white transition-colors"
-                                />
+            {/* BROADCAST TAB */}
+            {activeTab === 'broadcast' && (checkPermission('MANAGE_SYSTEM') || currentUserRole.isMaster) && (
+                <div className="bg-dark-800 p-8 rounded-3xl border border-white/5 shadow-2xl animate-fadeIn max-w-2xl mx-auto">
+                    <h3 className="text-2xl font-bold mb-6 flex items-center gap-3"><Radio className="w-6 h-6 text-green-400" /> System Broadcast</h3>
+                    <div className="space-y-4">
+                        <input value={broadcastForm.title} onChange={e => setBroadcastForm({...broadcastForm, title: e.target.value})} placeholder="Title" className="w-full bg-dark-900 border border-white/10 rounded-xl p-4 font-bold outline-none focus:border-green-500" />
+                        <textarea value={broadcastForm.body} onChange={e => setBroadcastForm({...broadcastForm, body: e.target.value})} placeholder="Message body..." className="w-full bg-dark-900 border border-white/10 rounded-xl p-4 h-32 outline-none focus:border-green-500 resize-none" />
+                        <input value={broadcastForm.link} onChange={e => setBroadcastForm({...broadcastForm, link: e.target.value})} placeholder="Optional Link (e.g. /anime/1)" className="w-full bg-dark-900 border border-white/10 rounded-xl p-4 text-sm font-mono outline-none focus:border-green-500" />
+                        
+                        <div className="bg-dark-900 p-4 rounded-xl border border-white/5 mt-4">
+                            <h4 className="text-xs font-bold text-slate-500 uppercase mb-2">Preview</h4>
+                            <div className="bg-dark-800 p-4 rounded-xl border border-white/10 flex gap-3">
+                                <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center"><Bell className="w-5 h-5 text-white" /></div>
+                                <div>
+                                    <div className="font-bold">{broadcastForm.title || 'Notification Title'}</div>
+                                    <div className="text-sm text-slate-400">{broadcastForm.body || 'Message content will appear here...'}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button onClick={sendBroadcast} disabled={!broadcastForm.title || !broadcastForm.body || sendingBroadcast} className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 rounded-xl shadow-lg transition-transform active:scale-95 disabled:opacity-50 disabled:scale-100 flex items-center justify-center gap-2">
+                            {sendingBroadcast ? <RefreshCw className="animate-spin w-5 h-5"/> : <Send className="w-5 h-5"/>} Send Broadcast
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* NEWSROOM TAB */}
+            {activeTab === 'newsroom' && (checkPermission('MANAGE_NEWS') || currentUserRole.isMaster) && (
+                <div className="space-y-6 animate-fadeIn">
+                    <h3 className="text-2xl font-bold flex items-center gap-3"><Newspaper className="w-6 h-6 text-orange-400" /> Editorial Queue</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {pendingNews.length === 0 ? <div className="col-span-full text-center py-12 text-slate-500">No pending articles.</div> : pendingNews.map(news => (
+                            <div key={news.id} className="bg-dark-800 rounded-2xl border border-white/5 overflow-hidden flex flex-col">
+                                <div className="h-40 relative">
+                                    <LazyImage src={news.image} alt={news.title} className="w-full h-full object-cover" />
+                                    <div className="absolute top-2 right-2 bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded shadow">{news.category}</div>
+                                </div>
+                                <div className="p-4 flex-1">
+                                    <h4 className="font-bold text-lg mb-2 line-clamp-2">{news.title}</h4>
+                                    <p className="text-sm text-slate-400 line-clamp-3 mb-4">{news.summary}</p>
+                                    <div className="flex items-center gap-2 text-xs text-slate-500 mb-4">
+                                        <span>By {news.author.name}</span> • <span>{new Date(news.createdAt).toLocaleDateString()}</span>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => handleNewsAction(news.id, 'PUBLISHED')} className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-bold text-sm">Approve</button>
+                                        <button onClick={() => handleNewsAction(news.id, 'REJECTED')} className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg font-bold text-sm">Reject</button>
+                                    </div>
+                                </div>
                             </div>
                         ))}
                     </div>
                 </div>
             )}
 
-            {/* TAB CONTENT: OVERVIEW (Existing) */}
-            {activeTab === 'overview' && (checkPermission('VIEW_ANALYTICS') || currentUserRole.isMaster) && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 animate-fadeIn">
-                    {[
-                        { label: 'Network Population', val: stats.totalUsers, color: 'text-blue-400', icon: Users },
-                        { label: 'Incident Reports', val: flaggedPosts.length, color: 'text-red-400', icon: AlertTriangle },
-                        { label: 'Dispatch Pending', val: pendingNews.length, color: 'text-orange-400', icon: Newspaper },
-                        { label: 'Active Sessions', val: Math.floor(Math.random() * 50) + 10, color: 'text-green-400', icon: Zap },
-                    ].map((card, i) => (
-                        <div key={i} className="bg-dark-800 p-6 rounded-3xl border border-white/5 shadow-xl hover:border-primary/20 transition-colors">
-                            <div className="flex justify-between items-start mb-4">
-                                <card.icon className={`w-6 h-6 ${card.color}`} />
-                                <span className="text-[10px] bg-white/5 px-2 py-1 rounded text-slate-500 uppercase font-black">Live Feed</span>
+            {/* MODERATION TAB */}
+            {activeTab === 'moderation' && (checkPermission('MODERATE_COMMUNITY') || currentUserRole.isMaster) && (
+                <div className="bg-dark-800 p-8 rounded-3xl border border-white/5 shadow-2xl animate-fadeIn">
+                    <h3 className="text-2xl font-bold flex items-center gap-3 mb-6"><AlertTriangle className="w-6 h-6 text-red-500" /> Flagged Content</h3>
+                    <div className="space-y-4">
+                        {flaggedPosts.length === 0 ? <div className="text-center py-12 text-slate-500">Clean records. No flags detected.</div> : flaggedPosts.map((post, i) => (
+                            <div key={i} className="bg-dark-900 p-4 rounded-xl border border-red-500/20 flex gap-4">
+                                <div className="flex-1">
+                                    <div className="flex justify-between mb-2">
+                                        <span className="font-bold text-red-400 text-sm">Flagged Reason: {post.flagReason || 'User Report'}</span>
+                                        <span className="text-xs text-slate-500">{post.userName} • {new Date(post.createdAt).toLocaleDateString()}</span>
+                                    </div>
+                                    <p className="text-slate-300 bg-black/20 p-3 rounded-lg text-sm">{post.content}</p>
+                                </div>
+                                <div className="flex flex-col gap-2 justify-center">
+                                    <button onClick={() => handleModeration(post.id, 'delete', post.animeId)} className="p-2 bg-red-600 text-white rounded hover:bg-red-700" title="Delete"><Trash2 className="w-4 h-4" /></button>
+                                    <button onClick={() => handleModeration(post.id, 'ignore', post.animeId)} className="p-2 bg-dark-700 text-slate-300 rounded hover:bg-dark-600" title="Dismiss"><CheckCircle className="w-4 h-4" /></button>
+                                </div>
                             </div>
-                            <h3 className="text-slate-400 text-sm font-bold uppercase mb-1">{card.label}</h3>
-                            <p className="text-4xl font-black">{card.val.toLocaleString()}</p>
-                        </div>
-                    ))}
-                    
-                    <div className="lg:col-span-3 bg-dark-800 p-8 rounded-3xl border border-white/5 shadow-xl">
-                        <h3 className="text-xl font-bold mb-6 flex items-center gap-2"><Activity className="w-5 h-5 text-primary" /> System Uptime & Latency</h3>
-                        <div className="h-48 bg-dark-900 rounded-2xl border border-white/5 flex items-end gap-2 p-6 overflow-hidden relative">
-                            {Array.from({ length: 40 }).map((_, i) => (
-                                <div key={i} className="bg-primary/40 w-full rounded-t" style={{ height: `${Math.random() * 80 + 20}%` }}></div>
-                            ))}
-                            <div className="absolute inset-0 flex items-center justify-center text-slate-600 font-mono text-xs font-bold uppercase tracking-widest opacity-30">Realtime Monitoring Active</div>
-                        </div>
+                        ))}
                     </div>
+                </div>
+            )}
 
-                    <div className="bg-dark-800 p-8 rounded-3xl border border-white/5 shadow-xl flex flex-col justify-center text-center">
-                        <Cpu className="w-12 h-12 text-slate-500 mx-auto mb-4 opacity-50" />
-                        <h3 className="font-bold text-slate-300">Server Node: EU-WEST-1</h3>
-                        <p className="text-[10px] text-slate-500 mt-2 uppercase">Load Level: Nominal</p>
-                        <div className="w-full bg-dark-900 h-1.5 rounded-full mt-4 overflow-hidden">
-                            <div className="bg-green-500 h-full w-[24%]"></div>
+            {/* ECONOMY TAB */}
+            {activeTab === 'economy' && (checkPermission('MANAGE_SYSTEM') || currentUserRole.isMaster) && (
+                <div className="bg-dark-800 p-8 rounded-3xl border border-white/5 shadow-2xl animate-fadeIn max-w-2xl mx-auto">
+                    <h3 className="text-2xl font-bold flex items-center gap-3 mb-6"><Coins className="w-6 h-6 text-yellow-400" /> XP Economy</h3>
+                    <div className="space-y-4">
+                        {Object.keys(xpRewards).map((key) => (
+                            <div key={key} className="flex items-center justify-between p-4 bg-dark-900 rounded-xl border border-white/5">
+                                <span className="font-bold capitalize text-slate-300">{key.replace(/([A-Z])/g, ' $1').trim()} Reward</span>
+                                <div className="flex items-center gap-2">
+                                    <input 
+                                        type="number" 
+                                        value={(xpRewards as any)[key]} 
+                                        onChange={e => setXpRewards({...xpRewards, [key]: parseInt(e.target.value)})}
+                                        className="w-20 bg-dark-800 border border-white/10 rounded-lg p-2 text-center font-bold text-yellow-400 focus:border-yellow-500 outline-none"
+                                    />
+                                    <span className="text-xs font-bold text-slate-500">XP</span>
+                                </div>
+                            </div>
+                        ))}
+                        <button onClick={handleSaveSystemConfig} className="w-full bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-3 rounded-xl shadow-lg mt-4">Save Economy Settings</button>
+                    </div>
+                </div>
+            )}
+
+            {/* AI CONTROL TAB */}
+            {activeTab === 'ai_control' && (checkPermission('MANAGE_SYSTEM') || currentUserRole.isMaster) && (
+                <div className="bg-dark-800 p-8 rounded-3xl border border-white/5 shadow-2xl animate-fadeIn">
+                    <h3 className="text-2xl font-bold flex items-center gap-3 mb-6"><BrainCircuit className="w-6 h-6 text-purple-400" /> AI Governance</h3>
+                    <div className="grid md:grid-cols-2 gap-8">
+                        <div className="space-y-4">
+                            <h4 className="font-bold text-xs uppercase text-slate-500">Rate Limiting</h4>
+                            <div className="flex justify-between items-center p-4 bg-dark-900 rounded-xl border border-white/5">
+                                <span>Base Daily Requests</span>
+                                <input type="number" value={aiLimits.baseDailyRequests} onChange={e => setAiLimits({...aiLimits, baseDailyRequests: parseInt(e.target.value)})} className="w-20 bg-dark-800 border border-white/10 rounded-lg p-2 text-center text-purple-400"/>
+                            </div>
+                            <div className="flex justify-between items-center p-4 bg-dark-900 rounded-xl border border-white/5">
+                                <span>Requests Per Level</span>
+                                <input type="number" value={aiLimits.requestsPerLevel} onChange={e => setAiLimits({...aiLimits, requestsPerLevel: parseInt(e.target.value)})} className="w-20 bg-dark-800 border border-white/10 rounded-lg p-2 text-center text-purple-400"/>
+                            </div>
+                            <div className="flex justify-between items-center p-4 bg-dark-900 rounded-xl border border-white/5">
+                                <span>Max Daily Cap</span>
+                                <input type="number" value={aiLimits.maxDailyRequests} onChange={e => setAiLimits({...aiLimits, maxDailyRequests: parseInt(e.target.value)})} className="w-20 bg-dark-800 border border-white/10 rounded-lg p-2 text-center text-purple-400"/>
+                            </div>
+                        </div>
+                        <div className="space-y-4">
+                            <h4 className="font-bold text-xs uppercase text-slate-500">Personality Core</h4>
+                            <textarea 
+                                value={sysConfig.aiSystemInstruction}
+                                onChange={e => setSysConfig({...sysConfig, aiSystemInstruction: e.target.value})}
+                                placeholder="Global System Instruction for AI Assistant..."
+                                className="w-full h-48 bg-dark-900 border border-white/10 rounded-xl p-4 text-sm font-mono focus:border-purple-500 outline-none resize-none"
+                            />
                         </div>
                     </div>
+                    <button onClick={handleSaveSystemConfig} className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-xl shadow-lg mt-6">Update AI Matrix</button>
                 </div>
             )}
 
@@ -761,8 +962,6 @@ const AdminDashboard: React.FC = () => {
                 </div>
             )}
 
-            {/* Other tabs existing ... */}
-            
             {/* BRANDING TAB (Visuals) - Existing */}
             {activeTab === 'branding' && (checkPermission('MANAGE_SYSTEM') || currentUserRole.isMaster) && (
                 <div className="bg-dark-800 p-8 rounded-[3rem] border border-white/5 max-w-4xl mx-auto shadow-2xl animate-fadeIn">

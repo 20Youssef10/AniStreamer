@@ -1,5 +1,4 @@
 
-// ... imports (keep existing)
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { anilistService } from '../services/anilist';
@@ -8,7 +7,7 @@ import { malService } from '../services/mal';
 import { mangadexService } from '../services/mangadex';
 import { mangahookService } from '../services/mangahook';
 import { olympusService } from '../services/olympus';
-import { Anime, UserListEntry, DiscussionPost, ManualChapter, MangaChapter } from '../types';
+import { Anime, UserListEntry, DiscussionPost, ManualChapter, MangaChapter, SourceChapter } from '../types';
 import { STATUS_OPTIONS } from '../constants';
 import { Calendar, Star, Heart, MessageSquare, BookOpen, BrainCircuit, Users, Link as LinkIcon, Briefcase, Share2, X, Plus, Zap, Book, Layers, Edit, ChevronDown, ChevronUp, ChevronRight, Globe, ThumbsUp, Reply, Trophy, Hash, Film, ExternalLink, PlayCircle, Download, CloudOff, Loader2, Filter, ArrowUp, ArrowDown } from 'lucide-react';
 import AnimeCard from '../components/AnimeCard';
@@ -27,7 +26,7 @@ const MangaDetails: React.FC<MangaDetailsProps> = ({ user }) => {
   const [manga, setManga] = useState<Anime | null>(null);
   const [userEntry, setUserEntry] = useState<UserListEntry | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'chapters' | 'characters' | 'staff' | 'recommendations' | 'discussions' | 'reviews'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'chapters' | 'characters' | 'staff' | 'recommendations' | 'discussions'>('overview');
   
   // Chapters
   const [manualChapters, setManualChapters] = useState<ManualChapter[]>([]);
@@ -44,7 +43,6 @@ const MangaDetails: React.FC<MangaDetailsProps> = ({ user }) => {
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
   const [availableLanguages, setAvailableLanguages] = useState<string[]>([]);
 
-  // ... (keep rest of state)
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [offlineIds, setOfflineIds] = useState<string[]>([]);
   const [charRole, setCharRole] = useState<'MAIN' | 'SUPPORTING'>('MAIN');
@@ -99,7 +97,14 @@ const MangaDetails: React.FC<MangaDetailsProps> = ({ user }) => {
         const dexId = await mangadexService.searchMangaId(title);
         if (dexId) {
             const chapters = await mangadexService.getChapters(dexId);
-            const mappedChapters = chapters.map(c => ({...c, source: 'dex' as const}));
+            const mappedChapters: MangaChapter[] = chapters.map(c => ({
+                id: c.id,
+                chapter: c.number,
+                title: c.title,
+                language: c.language,
+                publishAt: c.date,
+                source: 'dex'
+            }));
             setDexChapters(mappedChapters);
             
             const langs = Array.from(new Set(chapters.map(c => c.language).filter(Boolean))) as string[];
@@ -162,7 +167,14 @@ const MangaDetails: React.FC<MangaDetailsProps> = ({ user }) => {
           const hookId = await mangahookService.searchMangaId(title);
           if (hookId) {
               const chapters = await mangahookService.getChapters(hookId);
-              const mappedChapters = chapters.map(c => ({...c, source: 'hook' as const}));
+              const mappedChapters: MangaChapter[] = chapters.map(c => ({
+                  id: c.id,
+                  chapter: c.number,
+                  title: c.title,
+                  language: c.language,
+                  publishAt: c.date,
+                  source: 'hook'
+              }));
               setHookChapters(mappedChapters);
           }
       } catch (e) {
@@ -178,7 +190,14 @@ const MangaDetails: React.FC<MangaDetailsProps> = ({ user }) => {
           const olId = await olympusService.searchMangaId(title);
           if (olId) {
               const chapters = await olympusService.getChapters(olId);
-              const mappedChapters = chapters.map(c => ({...c, source: 'olympus' as const}));
+              const mappedChapters: MangaChapter[] = chapters.map(c => ({
+                  id: c.id,
+                  chapter: c.number,
+                  title: c.title,
+                  language: c.language,
+                  publishAt: c.date,
+                  source: 'olympus'
+              }));
               setOlympusChapters(mappedChapters);
               // Add 'es' to languages if found
               if (chapters.length > 0) {
@@ -192,7 +211,6 @@ const MangaDetails: React.FC<MangaDetailsProps> = ({ user }) => {
       }
   };
 
-  // ... (rest of methods: handleDownload, handleSaveEntry, etc. - ensure handleDownload passes source correctly)
   const handleDownload = async (chapter: MangaChapter, service: 'dex' | 'hook' | 'olympus') => {
       if (downloadingId) return;
       setDownloadingId(chapter.id);
@@ -226,8 +244,6 @@ const MangaDetails: React.FC<MangaDetailsProps> = ({ user }) => {
           setDownloadingId(null);
       }
   };
-
-  // ... (methods: handleSaveEntry, handleQuickRate, toggleFavorite, postComment, handleShare) -> No changes needed
 
   const handleSaveEntry = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -364,17 +380,15 @@ const MangaDetails: React.FC<MangaDetailsProps> = ({ user }) => {
       }
   };
 
-  // ... (render logic)
   if (loading || !manga) {
     return <div className="h-[50vh] flex items-center justify-center text-slate-400">Loading details...</div>;
   }
 
   const streamLinks = manga.externalLinks?.filter(l => l.type === 'STREAMING' || l.type === 'READING') || [];
-  const officialLinks = manga.externalLinks?.filter(l => l.type !== 'STREAMING' && l.type !== 'READING') || [];
   const currentDescription = selectedLang === 'original' ? manga.description : (customDescriptions[selectedLang] || manga.description);
 
   // Filter Chapters Logic
-  const displayChapters = [...dexChapters, ...olympusChapters].filter(ch => ch.language === selectedLanguage);
+  const displayChapters = [...dexChapters, ...olympusChapters, ...hookChapters].filter(ch => ch.language === selectedLanguage);
   
   // Sort Logic
   displayChapters.sort((a, b) => {
@@ -385,7 +399,7 @@ const MangaDetails: React.FC<MangaDetailsProps> = ({ user }) => {
 
   return (
     <div className="pb-20">
-      {/* ... (Keep existing UI code until Tabs) ... */}
+      {/* Trailer Modal */}
       {showTrailerModal && manga.trailer && (
           <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-4 backdrop-blur-xl animate-fadeIn" onClick={() => setShowTrailerModal(false)}>
               <div className="relative w-full max-w-5xl aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-white/10">
@@ -406,6 +420,7 @@ const MangaDetails: React.FC<MangaDetailsProps> = ({ user }) => {
           </div>
       )}
 
+      {/* Hero Banner */}
       <div className="relative w-full h-[35vh] md:h-[50vh] overflow-hidden">
         <div className="absolute inset-0">
           <LazyImage 
@@ -433,7 +448,7 @@ const MangaDetails: React.FC<MangaDetailsProps> = ({ user }) => {
                    </div>
                )}
             </div>
-            {/* ... Buttons ... */}
+            {/* User Actions */}
             {user ? (
               <div className="space-y-3">
                  <button 
@@ -504,7 +519,7 @@ const MangaDetails: React.FC<MangaDetailsProps> = ({ user }) => {
                 <Heart className="w-4 h-4 fill-current" /> {(manga.popularity || 0).toLocaleString()}
               </div>
               <div className="flex items-center gap-2 bg-dark-800/80 backdrop-blur border border-white/10 px-4 py-2 rounded-full text-slate-300 text-sm font-bold">
-                <Calendar className="w-4 h-4" /> {manga.startDate?.year}
+                <Calendar className="w-4 h-4" /> {manga.startDate.year}
               </div>
               <div className="flex items-center gap-2 bg-dark-800/80 backdrop-blur border border-white/10 px-4 py-2 rounded-full text-blue-400 text-sm font-bold">
                 <Book className="w-4 h-4" /> {manga.chapters || '?'} Ch • {manga.volumes || '?'} Vol
@@ -712,67 +727,47 @@ const MangaDetails: React.FC<MangaDetailsProps> = ({ user }) => {
                       </div>
 
                       <div className="grid grid-cols-1 gap-2">
-                          {/* Manual Chapters (Firebase) */}
-                          {manualChapters.map(ch => (
-                              <div key={`manual-${ch.id}`} className="flex items-center justify-between p-4 bg-dark-800 rounded-xl border border-white/5 hover:border-primary/50 hover:bg-dark-700 transition-all group">
-                                  <button onClick={() => openReader(ch)} className="text-left flex-1">
-                                      <div className="font-bold text-white group-hover:text-primary transition-colors">
-                                          Chapter {ch.number}
-                                          {ch.title && <span className="font-normal text-slate-400 ml-2">- {ch.title}</span>}
-                                      </div>
-                                      <div className="text-xs text-slate-500 mt-1 flex items-center gap-2">
-                                          <span className="bg-primary/20 text-primary px-1.5 rounded">Official</span>
-                                          {ch.language && <span className="text-slate-300 bg-white/10 px-1.5 rounded">{ch.language}</span>}
-                                          <span>{ch.pages.length} Pages • {new Date(ch.createdAt).toLocaleDateString()}</span>
-                                      </div>
-                                  </button>
-                                  <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-primary" />
-                              </div>
-                          ))}
-
-                          {/* All Scraped Chapters (Dex, Hook, Olympus) */}
                           {displayChapters.map(ch => (
-                              <div key={`${ch.source}-${ch.id}`} className="flex items-center justify-between p-4 bg-dark-800 rounded-xl border border-white/5 hover:border-green-500/50 hover:bg-dark-700 transition-all group">
-                                  <button onClick={() => openReader(ch)} className="text-left flex-1">
-                                      <div className="font-bold text-white group-hover:text-green-400 transition-colors">
-                                          {ch.chapter ? `Chapter ${ch.chapter}` : 'Oneshot'}
-                                          {ch.title && <span className="font-normal text-slate-400 ml-2">- {ch.title}</span>}
+                              <button 
+                                key={ch.id} 
+                                onClick={() => openReader(ch)}
+                                className="flex items-center justify-between bg-dark-800 p-4 rounded-xl border border-white/5 hover:border-primary/50 transition-all group text-left"
+                              >
+                                  <div>
+                                      <div className="font-bold text-slate-200 group-hover:text-primary transition-colors">
+                                          {ch.chapter === '0' ? 'Oneshot' : `Chapter ${ch.chapter}`}
                                       </div>
                                       <div className="text-xs text-slate-500 mt-1 flex items-center gap-2">
-                                          {ch.source === 'dex' && <span className="bg-green-500/20 text-green-400 px-1.5 rounded flex items-center gap-1"><Globe className="w-3 h-3"/> MangaDex</span>}
-                                          {ch.source === 'hook' && <span className="bg-purple-500/20 text-purple-400 px-1.5 rounded flex items-center gap-1"><Globe className="w-3 h-3"/> MangaHook</span>}
-                                          {ch.source === 'olympus' && <span className="bg-blue-500/20 text-blue-400 px-1.5 rounded flex items-center gap-1"><Globe className="w-3 h-3"/> Olympus</span>}
-                                          
-                                          {ch.language && <span className="text-slate-300 bg-white/10 px-1.5 rounded uppercase">{ch.language}</span>}
-                                          <span>{ch.pages || '?'} Pages • {new Date(ch.publishAt).toLocaleDateString()}</span>
+                                          {ch.title && <span className="truncate max-w-[200px]">{ch.title}</span>}
+                                          <span>•</span>
+                                          <span className="uppercase">{ch.language}</span>
+                                          <span>•</span>
+                                          <span className="capitalize">{ch.source}</span>
+                                          <span>•</span>
+                                          <span>{new Date(ch.publishAt).toLocaleDateString()}</span>
                                       </div>
-                                  </button>
-                                  <div className="flex gap-2">
-                                      {offlineIds.includes(ch.id) ? (
-                                          <CloudOff className="w-4 h-4 text-green-500" />
-                                      ) : (
-                                          <button onClick={() => handleDownload(ch, ch.source as any)} disabled={!!downloadingId} className="p-2 hover:bg-white/10 rounded-full text-slate-400 hover:text-white transition-colors">
-                                              {downloadingId === ch.id ? <Loader2 className="w-4 h-4 animate-spin"/> : <Download className="w-4 h-4"/>}
-                                          </button>
-                                      )}
                                   </div>
-                              </div>
+                                  <div className="flex items-center gap-3">
+                                      {offlineIds.includes(ch.id) ? (
+                                          <CloudOff className="w-5 h-5 text-green-500" />
+                                      ) : (
+                                          <div 
+                                            onClick={(e) => { e.stopPropagation(); handleDownload(ch, ch.source as any); }}
+                                            className="p-2 bg-white/5 rounded-full hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+                                          >
+                                              {downloadingId === ch.id ? <Loader2 className="w-4 h-4 animate-spin"/> : <Download className="w-4 h-4" />}
+                                          </div>
+                                      )}
+                                      <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-primary" />
+                                  </div>
+                              </button>
                           ))}
+                          {displayChapters.length === 0 && (
+                              <div className="text-center py-12 text-slate-500 bg-dark-800 rounded-xl border border-white/5">
+                                  No chapters found for this language/filter.
+                              </div>
+                          )}
                       </div>
-
-                      {manualChapters.length === 0 && displayChapters.length === 0 && hookChapters.length === 0 && !dexLoading && !hookLoading && !olympusLoading && (
-                          <div className="text-center py-12 bg-dark-800 rounded-xl border border-white/5">
-                              <BookOpen className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-                              <p className="text-slate-400">No chapters found for selected language.</p>
-                          </div>
-                      )}
-                      
-                      {(dexLoading || hookLoading || olympusLoading) && (
-                          <div className="text-center py-8">
-                              <div className="w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-                              <p className="text-slate-500 text-xs">Scanning Providers...</p>
-                          </div>
-                      )}
                   </div>
               )}
 
@@ -780,11 +775,11 @@ const MangaDetails: React.FC<MangaDetailsProps> = ({ user }) => {
               {activeTab === 'characters' && (
                 <div className="animate-fadeIn">
                     <div className="flex gap-2 mb-6 bg-dark-800 p-1 rounded-lg w-fit">
-                        <button onClick={() => setCharRole('MAIN')} className={`px-6 py-2 rounded-md text-sm font-bold transition-all ${charRole === 'MAIN' ? 'bg-primary text-white shadow' : 'text-slate-400 hover:text-white'}`}>Main Cast</button>
+                        <button onClick={() => setCharRole('MAIN')} className={`px-6 py-2 rounded-md text-sm font-bold transition-all ${charRole === 'MAIN' ? 'bg-primary text-white shadow' : 'text-slate-400 hover:text-white'}`}>Main</button>
                         <button onClick={() => setCharRole('SUPPORTING')} className={`px-6 py-2 rounded-md text-sm font-bold transition-all ${charRole === 'SUPPORTING' ? 'bg-primary text-white shadow' : 'text-slate-400 hover:text-white'}`}>Supporting</button>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {manga.characters?.edges.filter((edge: any) => edge.role === charRole).map((edge: any, index: number) => (
+                    {manga.characters?.edges.filter(edge => edge.role === charRole).map((edge, index) => (
                         <Link to={`/character/${edge.node.id}`} key={`${edge.node.id}-${index}`} className="flex items-center gap-4 bg-dark-800 p-4 rounded-xl border border-white/5 hover:border-primary/50 transition-all group">
                             <LazyImage src={edge.node.image.medium} alt={edge.node.name.full} className="w-16 h-16 rounded-full object-cover shadow-lg" />
                             <div>
@@ -799,7 +794,7 @@ const MangaDetails: React.FC<MangaDetailsProps> = ({ user }) => {
               {/* Staff Tab */}
               {activeTab === 'staff' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 animate-fadeIn">
-                  {manga.staff?.edges?.map((edge: any, i: number) => (
+                  {manga.staff?.edges?.map((edge, i) => (
                     <Link to={`/staff/${edge.node.id}`} key={i} className="flex items-center gap-4 bg-dark-800 p-4 rounded-xl border border-white/5 hover:border-white/20 transition-colors">
                       <LazyImage src={edge.node.image.medium} alt={edge.node.name.full} className="w-14 h-14 rounded-full object-cover" />
                       <div>
@@ -814,7 +809,7 @@ const MangaDetails: React.FC<MangaDetailsProps> = ({ user }) => {
               {/* Recommendations Tab */}
               {activeTab === 'recommendations' && (
                   <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6 animate-fadeIn">
-                      {manga.recommendations?.nodes.map((rec: any, i: number) => (
+                      {manga.recommendations?.nodes.map((rec, i) => (
                           <AnimeCard key={i} anime={rec.mediaRecommendation} />
                       ))}
                       {(!manga.recommendations?.nodes || manga.recommendations.nodes.length === 0) && (
@@ -839,7 +834,7 @@ const MangaDetails: React.FC<MangaDetailsProps> = ({ user }) => {
                       )}
                       <div className="space-y-4">
                           {discussions.map(post => {
-                              if (post.isHidden) return null; // Skip hidden posts
+                              if (post.isHidden) return null;
                               return (
                                 <div key={post.id} className={`bg-dark-800 p-5 rounded-xl border ${post.isFlagged ? 'border-red-500/30' : 'border-white/5'}`}>
                                     <div className="flex justify-between mb-3 items-center">
@@ -865,7 +860,7 @@ const MangaDetails: React.FC<MangaDetailsProps> = ({ user }) => {
         </div>
       </div>
 
-      {/* Editor Modal (Unchanged) */}
+      {/* Edit Modal */}
       {isListModalOpen && (
           <div className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setIsListModalOpen(false)}>
               <div className="bg-dark-800 w-full max-w-xl rounded-2xl border border-white/10 overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -873,8 +868,7 @@ const MangaDetails: React.FC<MangaDetailsProps> = ({ user }) => {
                       <h3 className="text-xl font-bold text-white">Edit List Entry</h3>
                       <button onClick={() => setIsListModalOpen(false)} className="text-slate-400 hover:text-white"><X className="w-6 h-6" /></button>
                   </div>
-                  <form onSubmit={handleSaveEntry} className="p-8 space-y-6 max-h-[80vh] overflow-y-auto custom-scrollbar">
-                      {/* ... form content ... */}
+                  <form onSubmit={(e) => handleSaveEntry(e)} className="p-8 space-y-6">
                       <div className="grid grid-cols-2 gap-6">
                           <div>
                               <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Status</label>
@@ -887,21 +881,23 @@ const MangaDetails: React.FC<MangaDetailsProps> = ({ user }) => {
                               <input type="number" min="0" max="100" value={editForm.score} onChange={e => setEditForm(prev => ({...prev, score: Number(e.target.value)}))} className="w-full bg-dark-900 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-primary outline-none text-white" />
                           </div>
                       </div>
-                      <div>
-                          <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Chapter Progress</label>
-                          <div className="flex items-center gap-3">
-                              <input type="number" min="0" max={manga.chapters || 999} value={editForm.progress} onChange={e => setEditForm(prev => ({...prev, progress: Number(e.target.value)}))} className="flex-1 bg-dark-900 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-primary outline-none text-white" />
-                              <span className="text-slate-400 font-bold whitespace-nowrap">/ {manga.chapters || '?'}</span>
+                      <div className="grid grid-cols-2 gap-6">
+                          <div>
+                              <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Chapter Progress</label>
+                              <div className="flex items-center gap-3">
+                                  <input type="number" min="0" max={manga.chapters || 9999} value={editForm.progress} onChange={e => setEditForm(prev => ({...prev, progress: Number(e.target.value)}))} className="flex-1 bg-dark-900 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-primary outline-none text-white" />
+                                  <span className="text-slate-400 font-bold whitespace-nowrap">/ {manga.chapters || '?'}</span>
+                              </div>
+                          </div>
+                          <div>
+                              <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Volume Progress</label>
+                              <div className="flex items-center gap-3">
+                                  <input type="number" min="0" max={manga.volumes || 999} value={editForm.progressVolumes} onChange={e => setEditForm(prev => ({...prev, progressVolumes: Number(e.target.value)}))} className="flex-1 bg-dark-900 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-primary outline-none text-white" />
+                                  <span className="text-slate-400 font-bold whitespace-nowrap">/ {manga.volumes || '?'}</span>
+                              </div>
                           </div>
                       </div>
-                      <div>
-                          <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Volume Progress</label>
-                          <div className="flex items-center gap-3">
-                              <input type="number" min="0" max={manga.volumes || 99} value={editForm.progressVolumes} onChange={e => setEditForm(prev => ({...prev, progressVolumes: Number(e.target.value)}))} className="flex-1 bg-dark-900 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-primary outline-none text-white" />
-                              <span className="text-slate-400 font-bold whitespace-nowrap">/ {manga.volumes || '?'}</span>
-                          </div>
-                      </div>
-                      <button type="submit" disabled={saving} className="w-full bg-primary hover:bg-blue-600 text-white font-bold py-4 rounded-xl transition-all shadow-lg hover:shadow-primary/25 disabled:opacity-50 disabled:cursor-not-allowed">{saving ? 'Saving...' : 'Save Entry'}</button>
+                      <button type="submit" disabled={saving} className="w-full bg-primary hover:bg-blue-600 text-white font-bold py-4 rounded-xl transition-all shadow-lg">{saving ? 'Saving...' : 'Save Entry'}</button>
                   </form>
               </div>
           </div>
@@ -910,13 +906,12 @@ const MangaDetails: React.FC<MangaDetailsProps> = ({ user }) => {
   );
 };
 
-// ... InfoItem component ...
-const InfoItem = ({ label, value }: { label: string, value: string | number | undefined | null }) => {
+const InfoItem = ({ label, value }: { label: string, value: React.ReactNode }) => {
     if (!value) return null;
     return (
         <div className="p-4 bg-dark-800 hover:bg-white/5 transition-colors">
             <div className="text-xs font-bold text-slate-500 uppercase mb-1">{label}</div>
-            <div className="text-sm text-slate-200 font-medium truncate" title={value.toString()}>{value}</div>
+            <div className="text-sm text-slate-200 font-medium truncate">{value}</div>
         </div>
     );
 };

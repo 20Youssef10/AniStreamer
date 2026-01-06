@@ -1,3 +1,4 @@
+
 export interface AppConfig {
   firebase: {
     apiKey: string;
@@ -181,6 +182,7 @@ export interface Staff {
   age?: number;
   gender?: string;
   homeTown?: string;
+  languageV2?: string;
   staffMedia?: {
     edges: {
       staffRole: string;
@@ -274,6 +276,7 @@ export interface UserProfile {
   level: number;
   xp: number;
   isAdmin?: boolean;
+  isBanned?: boolean;
   isPremium?: boolean;
   permissions?: AdminPermission[];
   favorites?: number[];
@@ -374,7 +377,7 @@ export interface MangaChapter {
   language: string;
   pages?: number; // count
   publishAt: string | number;
-  source: 'dex' | 'hook' | 'manual';
+  source: 'dex' | 'hook' | 'manual' | 'olympus';
 }
 
 export interface CustomList {

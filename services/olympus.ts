@@ -5,7 +5,7 @@ import { API_BASE_URL } from '../constants';
 class OlympusService implements MangaSource {
   id = 'olympus';
   name = 'Olympus';
-  version = '1.0.1';
+  version = '1.0.2';
   icon = 'https://olympusscans.com/wp-content/uploads/2022/06/cropped-Logo-Olympus-1-192x192.png';
   isNsfw = false;
   baseUrl = 'https://olympusscans.com';
@@ -13,24 +13,34 @@ class OlympusService implements MangaSource {
   private async fetchProxy(path: string): Promise<Document> {
       const targetUrl = `${this.baseUrl}${path.startsWith('/') ? '' : '/'}${path}`;
       
-      // Try using public CORS proxy first as it mimics browser headers better for scraping
-      try {
-          const response = await fetch(`https://corsproxy.io/?${encodeURIComponent(targetUrl)}`);
-          if (response.ok) {
-              const html = await response.text();
-              return new DOMParser().parseFromString(html, 'text/html');
+      const proxies = [
+          (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+          (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+          (url: string) => `https://thingproxy.freeboard.io/fetch/${url}`,
+          (url: string) => `${API_BASE_URL}/api/olympus/proxy?path=${encodeURIComponent(path)}` // Local backend fallback
+      ];
+
+      for (const proxyGen of proxies) {
+          try {
+              const url = proxyGen(targetUrl);
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout per proxy
+
+              const response = await fetch(url, { signal: controller.signal });
+              clearTimeout(timeoutId);
+
+              if (response.ok) {
+                  const html = await response.text();
+                  if (html.includes('<html') || html.includes('<!DOCTYPE html')) {
+                      return new DOMParser().parseFromString(html, 'text/html');
+                  }
+              }
+          } catch (e) {
+              // Continue to next proxy
           }
-      } catch (e) {
-          console.warn("Public proxy failed, trying backend...", e);
       }
 
-      // Fallback to our external backend proxy
-      // Construct absolute URL: https://backend.com/api/olympus/proxy...
-      const response = await fetch(`${API_BASE_URL}/api/olympus/proxy?path=${encodeURIComponent(path)}`);
-      
-      if (!response.ok) throw new Error(`Olympus Proxy Failed: ${response.status}`);
-      const html = await response.text();
-      return new DOMParser().parseFromString(html, 'text/html');
+      throw new Error("Olympus Search Error: Failed to fetch from all proxies");
   }
 
   async searchManga(query: string): Promise<SourceManga[]> {

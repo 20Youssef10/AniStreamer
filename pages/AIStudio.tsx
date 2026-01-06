@@ -91,7 +91,9 @@ const AIStudio: React.FC = () => {
                         {activeTab === 'tts' && <TTSModule />}
                     </>
                 ) : (
-                    <PremiumGuard />
+                    <PremiumGuard>
+                        <div /> {/* Placeholder to satisfy children prop */}
+                    </PremiumGuard>
                 )}
             </div>
         </div>

@@ -1,11 +1,10 @@
-
 {
   "name": "anistream",
   "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "node scripts/generate-sitemap.js && tsc && vite build",
     "preview": "vite preview",
     "start": "node server.js"
   },

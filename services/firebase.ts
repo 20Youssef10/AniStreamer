@@ -471,15 +471,22 @@ class FirebaseService {
 
   // --- News ---
   async getPublishedNews(limitCount: number = 10): Promise<NewsArticle[]> {
-      const q = query(collection(this.db, "news"), where("status", "==", "PUBLISHED"), orderBy("createdAt", "desc"), limit(limitCount));
+      // Avoid orderBy/where composite index issue by sorting in client
+      const q = query(collection(this.db, "news"), where("status", "==", "PUBLISHED"));
       const snap = await getDocs(q);
-      return snap.docs.map(d => ({ ...d.data(), id: d.id } as NewsArticle));
+      const articles = snap.docs.map(d => ({ ...d.data(), id: d.id } as NewsArticle));
+      // Sort client side
+      articles.sort((a, b) => b.createdAt - a.createdAt);
+      return articles.slice(0, limitCount);
   }
 
   async getPendingNews(): Promise<NewsArticle[]> {
-      const q = query(collection(this.db, "news"), where("status", "==", "PENDING"), orderBy("createdAt", "desc"));
+      // Avoid orderBy/where composite index issue
+      const q = query(collection(this.db, "news"), where("status", "==", "PENDING"));
       const snap = await getDocs(q);
-      return snap.docs.map(d => ({ ...d.data(), id: d.id } as NewsArticle));
+      const articles = snap.docs.map(d => ({ ...d.data(), id: d.id } as NewsArticle));
+      articles.sort((a, b) => b.createdAt - a.createdAt);
+      return articles;
   }
 
   async submitNews(article: any) {

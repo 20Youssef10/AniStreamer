@@ -1,16 +1,28 @@
 
 import { MangaSource, SourceChapter, SourceManga, MangaChapter } from '../types';
-import { API_BASE_URL } from '../constants';
-
-const PROXY_URL = 'https://corsproxy.io/?';
-const API_URL = 'https://api.mangadex.org';
 
 class MangadexService implements MangaSource {
   id = 'mangadex';
   name = 'MangaDex';
-  version = '1.0.0';
+  version = '1.0.1';
   icon = 'https://mangadex.org/favicon.ico';
   isNsfw = false;
+
+  private async fetchWithFallback(url: string): Promise<any> {
+      try {
+          // Try direct first
+          const res = await fetch(url);
+          if (!res.ok) throw new Error(`Direct fetch failed: ${res.status}`);
+          return await res.json();
+      } catch (e) {
+          console.warn("MangaDex direct fetch failed, trying proxy...", e);
+          // Try Proxy
+          const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+          const res = await fetch(proxyUrl);
+          if (!res.ok) throw new Error(`Proxy fetch failed: ${res.status}`);
+          return await res.json();
+      }
+  }
 
   /**
    * Search for a manga by title
@@ -18,12 +30,8 @@ class MangadexService implements MangaSource {
   async searchManga(query: string): Promise<SourceManga[]> {
     if (!query) return [];
     try {
-      // Use local backend proxy via API_BASE_URL for reliable search
-      const response = await fetch(`${API_BASE_URL}/api/mangadex/search?title=${encodeURIComponent(query)}`);
-      
-      if (!response.ok) throw new Error(`MangaDex API error: ${response.status}`);
-      
-      const data = await response.json();
+      const url = `https://api.mangadex.org/manga?title=${encodeURIComponent(query)}&limit=10&contentRating[]=safe&contentRating[]=suggestive&includes[]=cover_art`;
+      const data = await this.fetchWithFallback(url);
       
       return (data.data || []).map((m: any) => {
           const coverFile = m.relationships.find((r: any) => r.type === 'cover_art')?.attributes?.fileName;
@@ -52,11 +60,9 @@ class MangadexService implements MangaSource {
    */
   async getChapters(mangaId: string): Promise<SourceChapter[]> {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/mangadex/chapters/${mangaId}`);
+      const url = `https://api.mangadex.org/manga/${mangaId}/feed?order[chapter]=desc&limit=500&includes[]=scanlation_group`;
+      const data = await this.fetchWithFallback(url);
 
-      if (!response.ok) throw new Error(`MangaDex API error: ${response.status}`);
-
-      const data = await response.json();
       if (!data.data) return [];
 
       return data.data.map((ch: any) => ({
@@ -78,11 +84,8 @@ class MangadexService implements MangaSource {
    */
   async getPages(chapterId: string): Promise<string[]> {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/mangadex/pages/${chapterId}`);
-
-      if (!response.ok) throw new Error(`MangaDex API error: ${response.status}`);
-      
-      const data = await response.json();
+      const url = `https://api.mangadex.org/at-home/server/${chapterId}`;
+      const data = await this.fetchWithFallback(url);
 
       if (!data.baseUrl || !data.chapter || !data.chapter.hash || !data.chapter.data) {
           return [];

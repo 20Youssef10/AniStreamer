@@ -29,7 +29,8 @@ export const MentionInput: React.FC<{
   className?: string;
   singleLine?: boolean;
   onSubmit?: () => void;
-}> = ({ value, onChange, placeholder, className, singleLine, onSubmit }) => {
+  id?: string;
+}> = ({ value, onChange, placeholder, className, singleLine, onSubmit, id }) => {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     onChange(e.target.value);
   };
@@ -44,6 +45,7 @@ export const MentionInput: React.FC<{
   if (singleLine) {
     return (
       <input
+        id={id}
         type="text"
         value={value}
         onChange={handleChange}
@@ -56,6 +58,7 @@ export const MentionInput: React.FC<{
 
   return (
     <textarea
+      id={id}
       value={value}
       onChange={handleChange}
       onKeyDown={handleKeyDown}

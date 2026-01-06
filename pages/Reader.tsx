@@ -367,7 +367,7 @@ const Reader: React.FC = () => {
                                     {['black', 'gray', 'white'].map(bg => (
                                         <button 
                                             key={bg}
-                                            onClick={() => updateSettings({ reader: {...settings.reader, background: bg} })}
+                                            onClick={() => updateSettings({ reader: {...settings.reader, background: bg as 'white' | 'black' | 'gray'} })}
                                             className={`w-8 h-8 rounded-full border-2 ${settings.reader.background === bg ? 'border-primary scale-110' : 'border-transparent'}`}
                                             style={{ backgroundColor: bg === 'white' ? '#fff' : bg === 'gray' ? '#333' : '#121212' }}
                                         />

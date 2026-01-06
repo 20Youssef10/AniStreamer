@@ -407,45 +407,63 @@ class AIService {
 
   // 8. Text to Speech
   async generateSpeech(text: string, voice: string = 'Kore'): Promise<AudioBuffer> {
-      try {
-          const response = await this.client.models.generateContent({
-              model: "gemini-2.5-flash-preview-tts",
-              contents: [{ parts: [{ text }] }],
-              config: {
-                  responseModalities: [Modality.AUDIO],
-                  speechConfig: {
-                      voiceConfig: {
-                          prebuiltVoiceConfig: { voiceName: voice },
+      // Retry logic for 500 errors
+      let retries = 3;
+      while (retries > 0) {
+          try {
+              // Explicitly cast 'AUDIO' to avoid Enum transpilation issues in some build environments
+              const modalities: any = ['AUDIO']; 
+              
+              const response = await this.client.models.generateContent({
+                  model: "gemini-2.5-flash-preview-tts",
+                  contents: [{ parts: [{ text: text.trim() || 'Hello' }] }], // Ensure non-empty
+                  config: {
+                      responseModalities: modalities, 
+                      speechConfig: {
+                          voiceConfig: {
+                              prebuiltVoiceConfig: { voiceName: voice },
+                          },
                       },
                   },
-              },
-          });
+              });
 
-          const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-          if (!base64Audio) throw new Error("No audio generated");
+              const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+              
+              if (!base64Audio) {
+                  throw new Error("No audio generated");
+              }
 
-          const binaryString = atob(base64Audio);
-          const len = binaryString.length;
-          const bytes = new Uint8Array(len);
-          for (let i = 0; i < len; i++) {
-              bytes[i] = binaryString.charCodeAt(i);
+              const binaryString = atob(base64Audio);
+              const len = binaryString.length;
+              const bytes = new Uint8Array(len);
+              for (let i = 0; i < len; i++) {
+                  bytes[i] = binaryString.charCodeAt(i);
+              }
+
+              const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({sampleRate: 24000});
+              
+              // Decode raw PCM scaling by 32768
+              const dataInt16 = new Int16Array(bytes.buffer);
+              const buffer = audioContext.createBuffer(1, dataInt16.length, 24000);
+              const channelData = buffer.getChannelData(0);
+              for (let i = 0; i < dataInt16.length; i++) {
+                  channelData[i] = dataInt16[i] / 32768.0;
+              }
+              
+              return buffer;
+          } catch (e: any) {
+              console.error(`AI TTS Error (Attempt ${4 - retries}):`, e);
+              if (e.message?.includes("500") || e.status === 500) {
+                  retries--;
+                  if (retries > 0) {
+                      await new Promise(res => setTimeout(res, 1000)); // Wait 1s before retry
+                      continue;
+                  }
+              }
+              throw e;
           }
-
-          const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({sampleRate: 24000});
-          
-          // Decode raw PCM scaling by 32768
-          const dataInt16 = new Int16Array(bytes.buffer);
-          const buffer = audioContext.createBuffer(1, dataInt16.length, 24000);
-          const channelData = buffer.getChannelData(0);
-          for (let i = 0; i < dataInt16.length; i++) {
-              channelData[i] = dataInt16[i] / 32768.0;
-          }
-          
-          return buffer;
-      } catch (e) {
-          console.error("AI TTS Error:", e);
-          throw e;
       }
+      throw new Error("TTS Failed after multiple attempts");
   }
 }
 
